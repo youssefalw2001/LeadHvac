@@ -1,3 +1,21 @@
+.admin-launcher {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 90;
+  border: 0;
+  border-radius: 999px;
+  background: #07142f;
+  color: #fff;
+  padding: 13px 18px;
+  font-weight: 900;
+  box-shadow: 0 18px 45px rgba(7, 20, 47, 0.28);
+}
+
+.admin-launcher:hover {
+  background: #0b5cff;
+}
+
 .admin-overlay {
   position: fixed;
   inset: 0;
