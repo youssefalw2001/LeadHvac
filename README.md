@@ -6,22 +6,28 @@ Promise:
 
 > Stop leaking local jobs to competitors.
 
-The product helps roofers, HVAC companies, plumbers, and other local service businesses identify missed local-search opportunities, review gaps, competitor advantages, and website fixes that can turn more search demand into calls, quote requests, and booked jobs.
+The product helps roofers, HVAC companies, plumbers, electricians, pest control companies, and other local service businesses identify missed local-search opportunities, review gaps, competitor advantages, and website fixes that can turn more search demand into calls, quote requests, and booked jobs.
 
-## MVP
+## Current frontend
 
-- Premium SaaS landing page
-- Free Job Leak Scan form
-- Sample report page
-- Pricing page
-- Home-service focused positioning
-- Reusable UI components
+This repo now uses a Vite + React frontend based on the AI Studio build, cleaned up for the JobLeak brand.
+
+Included:
+
+- Premium SaaS homepage
+- Free scan form with simulated scan flow
+- Dynamic sample report page
+- Client login/demo portal page
+- Dashboard demo
+- Industry-specific scan data for roofing, HVAC, plumbing, electrical, and pest control
+- Render Static Site deployment support
 
 ## Stack
 
-- Next.js App Router
+- Vite
+- React
 - TypeScript
-- Tailwind CSS
+- CSS
 - Lucide React icons
 
 ## Local development
@@ -29,6 +35,15 @@ The product helps roofers, HVAC companies, plumbers, and other local service bus
 ```bash
 npm install
 npm run dev
+```
+
+## Render deploy settings
+
+Use **Static Site**, not Web Service.
+
+```text
+Build Command: npm install && npm run build
+Publish Directory: dist
 ```
 
 ## Product positioning
@@ -43,3 +58,22 @@ Core offer:
 - Lead capture widget
 - Local service page ideas
 - Monthly action plan
+
+## Next product step
+
+Connect the free scan form to a real backend:
+
+- Supabase `scan_requests` table, or
+- Formspree/Tally/Google Sheet for the first MVP
+
+Recommended fields:
+
+- business name
+- industry
+- city/market
+- website
+- email
+- phone
+- growth goal
+- status
+- created_at
