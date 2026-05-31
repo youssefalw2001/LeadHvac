@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f8fbff;
+  --foreground: #08112f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at top left, rgba(11, 92, 255, 0.10), transparent 34%),
+    linear-gradient(180deg, #ffffff 0%, #f8fbff 45%, #ffffff 100%);
+  color: var(--foreground);
+}
+
+::selection {
+  background: rgba(11, 92, 255, 0.16);
+}
+
+.gradient-border {
+  background: linear-gradient(#ffffff, #ffffff) padding-box,
+    linear-gradient(135deg, rgba(11, 92, 255, 0.55), rgba(23, 178, 106, 0.4)) border-box;
+  border: 1px solid transparent;
+}
+
+.noise {
+  background-image: radial-gradient(rgba(8, 17, 47, 0.06) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
