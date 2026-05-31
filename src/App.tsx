@@ -1,23 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   ArrowRight,
-  BarChart3,
   Check,
   ChevronRight,
-  Clipboard,
   Clock,
   Copy,
   FileText,
   Gauge,
   ListChecks,
   LockKeyhole,
-  Mail,
   MapPin,
   Megaphone,
   Menu,
   MessageSquare,
-  Phone,
   Search,
   ShieldCheck,
   Sparkles,
@@ -29,12 +26,14 @@ import {
   Zap
 } from 'lucide-react';
 import { saveLead } from './leadCapture';
+import './opportunity.css';
 
 type Route = 'home' | 'radar' | 'campaign' | 'login' | 'dashboard' | 'report';
 type Industry = 'roofing' | 'hvac' | 'plumbing' | 'electrical' | 'pest' | 'garage';
 type Confidence = 'High' | 'Medium' | 'Rising';
 type LaunchType = 'google-search' | 'lsa' | 'reactivation';
-type CampaignTab = 'google-search' | 'lsa' | 'reactivation' | 'checklist';
+type CampaignTab = 'google-search' | 'lsa' | 'reactivation' | 'checklist' | 'tracking';
+type CampaignStage = 'Draft' | 'Launched' | 'Calls Added' | 'Booked Jobs Added';
 
 type ScanInput = {
   businessName: string;
@@ -45,6 +44,16 @@ type ScanInput = {
   email: string;
   phone: string;
   goal: string;
+};
+
+type OpportunityScore = {
+  urgency: number;
+  searchIntent: number;
+  competitionGap: number;
+  revenuePotential: number;
+  launchReadiness: number;
+  difficultyPenalty: number;
+  total: number;
 };
 
 type Opportunity = {
@@ -62,6 +71,9 @@ type Opportunity = {
   launchType: LaunchType;
   audience: string;
   urgency: string;
+  score: OpportunityScore;
+  rawSignals: number;
+  launchReadinessNotes: string[];
 };
 
 type CampaignPack = {
@@ -381,13 +393,13 @@ function Home({ go, onScan, openCampaign, scan }: { go: (r: Route) => void; onSc
           <div className="hero-copy">
             <div className="eyebrow"><ShieldCheck size={16} /> AI opportunity radar for home services</div>
             <h1>Find local job opportunities before your competitors do.</h1>
-            <p>JobLeak spots local demand signals for contractors and turns them into ready-to-run Google ads, Local Services checklists, reactivation messages, and call scripts.</p>
+            <p>JobLeak scores local demand signals for contractors and turns the highest-value opportunities into Google ads, Local Services checklists, reactivation messages, and call scripts.</p>
             <div className="cta-row">
               <button className="primary" onClick={() => go('radar')}>Generate Opportunity Scan <ArrowRight size={18} /></button>
               <button className="secondary" onClick={() => openCampaign(heroOpportunity)}>Generate Google Campaign Pack</button>
             </div>
             <div className="trust-row">
-              {['No SEO jargon', 'Google-ready campaign assets', 'Opt-in customer messaging only'].map((x) => <span key={x}><Check size={14} /> {x}</span>)}
+              {['Opportunity scoring', 'Google-ready campaign assets', 'Launch tracking built in'].map((x) => <span key={x}><Check size={14} /> {x}</span>)}
             </div>
           </div>
           <OpportunityPreview opportunity={heroOpportunity} openCampaign={openCampaign} />
@@ -397,9 +409,9 @@ function Home({ go, onScan, openCampaign, scan }: { go: (r: Route) => void; onSc
       <section className="metric-strip">
         <div className="container metric-grid">
           {[
-            ['3', 'launch engines'],
+            ['3', 'ranked opportunities'],
+            ['83+', 'target score'],
             ['1 click', 'campaign pack'],
-            ['Today', 'copy and launch'],
             ['$199', 'Growth plan target']
           ].map(([n, l]) => <div key={l}><strong>{n}</strong><span>{l}</span></div>)}
         </div>
@@ -410,9 +422,9 @@ function Home({ go, onScan, openCampaign, scan }: { go: (r: Route) => void; onSc
           <div>
             <div className="label">The product</div>
             <h2>One screen tells owners what jobs to chase this week.</h2>
-            <p>Contractors should not need to understand analytics. JobLeak shows the opportunity, why it matters, the offer to run, and the campaign assets to launch.</p>
+            <p>Contractors should not need to understand analytics. JobLeak scores the opportunity, explains why it matters, recommends the channel, and generates the launch assets.</p>
             <div className="check-list">
-              {['Spot urgent local demand signals', 'Recommend the best of 3 launch engines', 'Generate copy, keywords, scripts, and checklist', 'Track leads through the existing JobLeak inbox'].map((x) => <div key={x}><Check size={18} /> {x}</div>)}
+              {['Score urgency, search intent, competition gap, revenue, and readiness', 'Recommend the best of 3 launch engines', 'Generate copy, keywords, scripts, and checklist', 'Track calls and booked jobs after launch'].map((x) => <div key={x}><Check size={18} /> {x}</div>)}
             </div>
           </div>
           <div className="tool-grid">
@@ -424,13 +436,13 @@ function Home({ go, onScan, openCampaign, scan }: { go: (r: Route) => void; onSc
       <section className="section muted">
         <div className="container centered">
           <div className="label">How it works</div>
-          <h2>Opportunity to campaign in seconds.</h2>
-          <p>JobLeak focuses on the fastest contractor workflow: signal, offer, campaign, call.</p>
+          <h2>Opportunity to campaign to proof.</h2>
+          <p>The product loop is simple: find the opportunity, launch the campaign, track the calls, learn what worked.</p>
           <div className="feature-grid">
             {[
               ['1. Select market', MapPin, 'Choose industry, city, and service type.'],
-              ['2. Pick opportunity', Target, 'Review local job opportunities and confidence level.'],
-              ['3. Launch campaign', Megaphone, 'Copy Google ads, LSA checklist, reactivation messages, and call scripts.']
+              ['2. Rank Top 3', Target, 'See opportunity score, daily signal count, and readiness.'],
+              ['3. Track results', Megaphone, 'Copy the campaign, mark it launched, and add calls/jobs.']
             ].map(([title, Icon, text]) => <div className="feature-card" key={title as string}><Icon size={26} /><strong>{title as string}</strong><p>{text as string}</p></div>)}
           </div>
         </div>
@@ -482,9 +494,9 @@ function OpportunityPreview({ opportunity, openCampaign }: { opportunity: Opport
       <div className="radar-screen-top"><span>Live JobLeak Radar</span><strong>{opportunity.market}</strong></div>
       <OpportunityCard opportunity={opportunity} openCampaign={openCampaign} featured />
       <div className="mini-pack">
-        <div><Search size={18} /><strong>Google Search</strong><span>Keywords + ads</span></div>
-        <div><Star size={18} /><strong>Local Services</strong><span>Setup checklist</span></div>
-        <div><MessageSquare size={18} /><strong>Reactivation</strong><span>Email + SMS</span></div>
+        <div><Gauge size={18} /><strong>{opportunity.score.total}/100</strong><span>Opportunity score</span></div>
+        <div><Zap size={18} /><strong>{opportunity.rawSignals}</strong><span>signals scanned</span></div>
+        <div><MessageSquare size={18} /><strong>Track</strong><span>calls + jobs</span></div>
       </div>
     </div>
   );
@@ -493,6 +505,8 @@ function OpportunityPreview({ opportunity, openCampaign }: { opportunity: Opport
 function OpportunityRadar({ go, scan, setScan, openCampaign }: { go: (r: Route) => void; scan: ScanInput; setScan: (input: ScanInput) => void; openCampaign: (opportunity: Opportunity) => void }) {
   const [draft, setDraft] = useState<ScanInput>(scan);
   const opportunities = useMemo(() => buildOpportunities(draft), [draft]);
+  const topOpportunity = opportunities[0];
+  const totalSignals = opportunities.reduce((sum, item) => sum + item.rawSignals, 0);
 
   function update<K extends keyof ScanInput>(key: K, value: ScanInput[K]) {
     const next = { ...draft, [key]: value };
@@ -510,11 +524,17 @@ function OpportunityRadar({ go, scan, setScan, openCampaign }: { go: (r: Route) 
         <div className="container">
           <div className="portal-head">
             <div>
-              <div className="label">Opportunity Radar</div>
+              <div className="label">Today&apos;s Top 3</div>
               <h1>What jobs should you chase this week?</h1>
-              <p>Choose the trade, market, and service. JobLeak recommends the opportunity and the launch engine.</p>
+              <p>JobLeak ranks the top opportunities by urgency, intent, competition gap, revenue potential, launch readiness, and difficulty.</p>
             </div>
             <button className="secondary" onClick={() => go('campaign')}>Open Campaign Generator</button>
+          </div>
+
+          <div className="signal-summary">
+            <SignalCard label="Best opportunity" value={`${topOpportunity.score.total}/100`} detail={topOpportunity.title} icon={Gauge} />
+            <SignalCard label="Signals scanned" value={`${totalSignals}`} detail="Market, urgency, trust, and owned-audience signals" icon={Zap} />
+            <SignalCard label="Recommended first launch" value={launchTypeLabels[topOpportunity.launchType]} detail={topOpportunity.offer} icon={Megaphone} />
           </div>
 
           <div className="radar-controls">
@@ -543,6 +563,10 @@ function OpportunityRadar({ go, scan, setScan, openCampaign }: { go: (r: Route) 
   );
 }
 
+function SignalCard({ label, value, detail, icon: Icon }: { label: string; value: string; detail: string; icon: LucideIcon }) {
+  return <div className="signal-card"><Icon size={22} /><span>{label}</span><strong>{value}</strong><p>{detail}</p></div>;
+}
+
 function OpportunityCard({ opportunity, openCampaign, featured = false }: { opportunity: Opportunity; openCampaign: (opportunity: Opportunity) => void; featured?: boolean }) {
   return (
     <article className={`opportunity-card ${featured ? 'featured' : ''}`}>
@@ -551,23 +575,48 @@ function OpportunityCard({ opportunity, openCampaign, featured = false }: { oppo
           <span className="confidence">{opportunity.confidence} confidence</span>
           <h3>{opportunity.title}</h3>
         </div>
-        <span className={`launch-badge ${opportunity.launchType}`}>{launchTypeLabels[opportunity.launchType]}</span>
+        <div className="score-pill"><strong>{opportunity.score.total}</strong><span>/100</span></div>
       </div>
-      <div className="opp-meta"><MapPin size={16} /> {opportunity.market} <span /> <Zap size={16} /> {opportunity.service}</div>
+      <div className="opp-meta"><MapPin size={16} /> {opportunity.market} <span /> <Zap size={16} /> {opportunity.rawSignals} signals <span /> {opportunity.service}</div>
+      <div className="score-breakdown">
+        <ScoreLine label="Urgency" value={opportunity.score.urgency} max={25} />
+        <ScoreLine label="Search intent" value={opportunity.score.searchIntent} max={25} />
+        <ScoreLine label="Competition gap" value={opportunity.score.competitionGap} max={20} />
+        <ScoreLine label="Revenue" value={opportunity.score.revenuePotential} max={15} />
+        <ScoreLine label="Readiness" value={opportunity.score.launchReadiness} max={10} />
+      </div>
+      <span className={`launch-badge ${opportunity.launchType}`}>{launchTypeLabels[opportunity.launchType]}</span>
       <div className="signal-box"><strong>Signal:</strong> {opportunity.signal}</div>
       <p><strong>Why it matters:</strong> {opportunity.why}</p>
       <div className="opp-details">
         <div><span>Suggested offer</span><strong>{opportunity.offer}</strong></div>
         <div><span>Recommended action</span><strong>{opportunity.action}</strong></div>
       </div>
+      <div className="readiness-notes">
+        {opportunity.launchReadinessNotes.slice(0, 2).map((note) => <span key={note}><Check size={14} /> {note}</span>)}
+      </div>
       <button className="primary full" onClick={() => openCampaign(opportunity)}>Generate Campaign Pack <ArrowRight size={18} /></button>
     </article>
+  );
+}
+
+function ScoreLine({ label, value, max }: { label: string; value: number; max: number }) {
+  const percent = Math.round((value / max) * 100);
+  return (
+    <div className="score-line">
+      <div><span>{label}</span><strong>{value}/{max}</strong></div>
+      <i><b style={{ width: `${percent}%` }} /></i>
+    </div>
   );
 }
 
 function CampaignPage({ go, opportunity }: { go: (r: Route) => void; opportunity: Opportunity }) {
   const [tab, setTab] = useState<CampaignTab>(opportunity.launchType);
   const [copied, setCopied] = useState('');
+  const [stage, setStage] = useState<CampaignStage>('Draft');
+  const [calls, setCalls] = useState(0);
+  const [jobs, setJobs] = useState(0);
+  const [revenue, setRevenue] = useState(0);
   const pack = useMemo(() => generateCampaignPack(opportunity), [opportunity]);
 
   async function copyText(label: string, text: string) {
@@ -600,12 +649,14 @@ function CampaignPage({ go, opportunity }: { go: (r: Route) => void; opportunity
             <div className="label green">Instant Campaign Pack</div>
             <h1>{pack.name}</h1>
             <p>{pack.objective}</p>
+            <div className="summary-score"><strong>{opportunity.score.total}</strong><span>Opportunity Score</span></div>
             <div className="summary-card"><span>Recommended launch</span><strong>{launchTypeLabels[opportunity.launchType]}</strong></div>
             <div className="summary-card"><span>Budget starter</span><strong>{pack.budget}</strong></div>
-            <div className="summary-card"><span>Offer</span><strong>{pack.offer}</strong></div>
+            <div className="summary-card"><span>Campaign stage</span><strong>{stage}</strong></div>
             <button className="primary full" onClick={() => copyText('Full campaign copied', campaignToText(pack))}><Copy size={18} /> Copy Full Pack</button>
             <button className="secondary full" onClick={exportPack}><FileText size={18} /> Export Launch File</button>
             <a className="secondary full" href="https://ads.google.com" target="_blank" rel="noreferrer"><Search size={18} /> Open Google Ads</a>
+            <button className="secondary full" onClick={() => setTab('tracking')}><Gauge size={18} /> Track Results</button>
             <small>{copied || 'Creates real launch assets. Direct Google publishing needs secure OAuth/backend later.'}</small>
           </aside>
 
@@ -615,7 +666,8 @@ function CampaignPage({ go, opportunity }: { go: (r: Route) => void; opportunity
                 ['google-search', 'Google Search'],
                 ['lsa', 'Local Services'],
                 ['reactivation', 'Reactivation'],
-                ['checklist', 'Checklist']
+                ['checklist', 'Checklist'],
+                ['tracking', 'Tracking']
               ] as Array<[CampaignTab, string]>).map(([key, label]) => <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>{label}</button>)}
             </div>
 
@@ -623,6 +675,7 @@ function CampaignPage({ go, opportunity }: { go: (r: Route) => void; opportunity
             {tab === 'lsa' && <LsaPack pack={pack} copyText={copyText} />}
             {tab === 'reactivation' && <ReactivationPack pack={pack} copyText={copyText} />}
             {tab === 'checklist' && <ChecklistPack pack={pack} copyText={copyText} />}
+            {tab === 'tracking' && <TrackingPack stage={stage} setStage={setStage} calls={calls} setCalls={setCalls} jobs={jobs} setJobs={setJobs} revenue={revenue} setRevenue={setRevenue} />}
           </div>
         </div>
       </section>
@@ -710,6 +763,38 @@ function ChecklistPack({ pack, copyText }: { pack: CampaignPack; copyText: (labe
   );
 }
 
+function TrackingPack({ stage, setStage, calls, setCalls, jobs, setJobs, revenue, setRevenue }: {
+  stage: CampaignStage;
+  setStage: (stage: CampaignStage) => void;
+  calls: number;
+  setCalls: (value: number) => void;
+  jobs: number;
+  setJobs: (value: number) => void;
+  revenue: number;
+  setRevenue: (value: number) => void;
+}) {
+  return (
+    <div className="pack-panel tracking-panel">
+      <PackHeader icon={Gauge} title="Campaign Proof Tracker" subtitle="This is the retention loop: did the campaign create calls, booked jobs, and revenue?" onCopy={() => undefined} />
+      <div className="tracker-grid">
+        <div className="tracker-card"><span>Stage</span><strong>{stage}</strong></div>
+        <div className="tracker-card"><span>Calls</span><strong>{calls}</strong></div>
+        <div className="tracker-card"><span>Booked jobs</span><strong>{jobs}</strong></div>
+        <div className="tracker-card"><span>Est. revenue</span><strong>${revenue.toLocaleString()}</strong></div>
+      </div>
+      <div className="result-buttons">
+        <button className="primary" onClick={() => setStage('Launched')}>Mark as launched</button>
+        <button className="secondary" onClick={() => { setCalls(calls + 1); setStage('Calls Added'); }}>+ Add call</button>
+        <button className="secondary" onClick={() => { setJobs(jobs + 1); setStage('Booked Jobs Added'); }}>+ Add booked job</button>
+      </div>
+      <label>Estimated revenue from this campaign
+        <input type="number" min="0" value={revenue} onChange={(e) => setRevenue(Number(e.target.value))} />
+      </label>
+      <div className="safe-note"><TrendingUp size={18} /> Next backend step: save this tracker to Supabase so JobLeak learns which opportunities actually produce booked jobs.</div>
+    </div>
+  );
+}
+
 function PackHeader({ icon: Icon, title, subtitle, onCopy }: { icon: LucideIcon; title: string; subtitle: string; onCopy: () => void }) {
   return (
     <div className="pack-header">
@@ -740,7 +825,7 @@ function ScanForm({ onScan }: { onScan: (input: ScanInput) => void }) {
     setForm(next);
   }
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalized: ScanInput = {
       ...defaultScan,
@@ -811,10 +896,10 @@ function Dashboard({ go, scan, openCampaign }: { go: (r: Route) => void; scan: S
             <div><div className="label">Client command center</div><h1>{scan.businessName}</h1><p>{industryLabels[scan.industry]} opportunity dashboard - {scan.city}</p></div>
             <button className="primary" onClick={() => go('radar')}>New Opportunity Scan</button>
           </div>
-          <div className="report-metrics"><Stat label="Open opportunities" value="3" /><Stat label="Recommended engine" value="Google" /><Stat label="Campaign packs" value="Ready" /><Stat label="Lead inbox" value="Live" /></div>
+          <div className="report-metrics"><Stat label="Top score" value={`${opportunities[0].score.total}/100`} /><Stat label="Signals scanned" value={`${opportunities.reduce((sum, item) => sum + item.rawSignals, 0)}`} /><Stat label="Campaign packs" value="Ready" /><Stat label="Lead inbox" value="Live" /></div>
           <div className="portal-grid">
-            <div className="panel big"><h2>Top opportunities</h2>{opportunities.map((opportunity) => <div className="lead-row" key={opportunity.id}><div><strong>{opportunity.title}</strong><span>{opportunity.signal}</span></div><button onClick={() => openCampaign(opportunity)}>Campaign</button></div>)}</div>
-            <div className="panel big"><h2>Lead follow-up</h2>{['Call new scan requests within 5 minutes', 'Ask which service they want more of this week', 'Offer Growth plan for campaign packs', 'Track calls and booked jobs'].map((a) => <div className="action-row" key={a}><Check size={17} /> {a}</div>)}</div>
+            <div className="panel big"><h2>Top opportunities</h2>{opportunities.map((opportunity) => <div className="lead-row" key={opportunity.id}><div><strong>{opportunity.title} - {opportunity.score.total}/100</strong><span>{opportunity.signal}</span></div><button onClick={() => openCampaign(opportunity)}>Campaign</button></div>)}</div>
+            <div className="panel big"><h2>Proof loop</h2>{['Launch the recommended campaign', 'Add calls and booked jobs', 'Estimate revenue from campaign', 'Use the result to improve the next scan'].map((a) => <div className="action-row" key={a}><Check size={17} /> {a}</div>)}</div>
           </div>
         </div>
       </section>
@@ -847,7 +932,7 @@ function buildOpportunities(input: ScanInput): Opportunity[] {
   const pb = playbooks[input.industry];
   const market = input.city || defaultScan.city;
   const service = input.service || pb.services[0];
-  return [
+  const opportunities: Array<Omit<Opportunity, 'score' | 'rawSignals' | 'launchReadinessNotes'>> = [
     {
       id: `${input.industry}-google-search`,
       title: pb.emergencyTitle,
@@ -897,6 +982,42 @@ function buildOpportunities(input: ScanInput): Opportunity[] {
       urgency: 'Follow up this week'
     }
   ];
+
+  return opportunities
+    .map((opportunity) => {
+      const score = scoreOpportunity(opportunity.launchType, input.industry);
+      return {
+        ...opportunity,
+        score,
+        rawSignals: getSignalCount(opportunity.launchType, input.industry),
+        launchReadinessNotes: getReadinessNotes(opportunity.launchType)
+      };
+    })
+    .sort((a, b) => b.score.total - a.score.total);
+}
+
+function scoreOpportunity(launchType: LaunchType, industry: Industry): OpportunityScore {
+  const baseByLaunch: Record<LaunchType, Omit<OpportunityScore, 'total'>> = {
+    'google-search': { urgency: 24, searchIntent: 23, competitionGap: 15, revenuePotential: 14, launchReadiness: 8, difficultyPenalty: 4 },
+    lsa: { urgency: 18, searchIntent: 24, competitionGap: 18, revenuePotential: 14, launchReadiness: 7, difficultyPenalty: 6 },
+    reactivation: { urgency: 14, searchIntent: 16, competitionGap: 14, revenuePotential: 12, launchReadiness: 9, difficultyPenalty: 2 }
+  };
+  const industryBoost: Record<Industry, number> = { hvac: 3, plumbing: 2, roofing: 2, electrical: 1, pest: 1, garage: 2 };
+  const raw = baseByLaunch[launchType];
+  const total = Math.max(1, Math.min(100, raw.urgency + raw.searchIntent + raw.competitionGap + raw.revenuePotential + raw.launchReadiness + industryBoost[industry] - raw.difficultyPenalty));
+  return { ...raw, total };
+}
+
+function getSignalCount(launchType: LaunchType, industry: Industry) {
+  const base: Record<LaunchType, number> = { 'google-search': 34, lsa: 21, reactivation: 13 };
+  const boost: Record<Industry, number> = { hvac: 14, plumbing: 10, roofing: 12, electrical: 8, pest: 7, garage: 9 };
+  return base[launchType] + boost[industry];
+}
+
+function getReadinessNotes(launchType: LaunchType) {
+  if (launchType === 'google-search') return ['Needs call tracking', 'Needs focused landing page', 'Answer calls live'];
+  if (launchType === 'lsa') return ['Needs reviews and service categories', 'Needs quick lead response', 'Budget after lead quality'];
+  return ['Owned/opted-in list only', 'Best for past customers', 'Track booked jobs'];
 }
 
 function generateCampaignPack(opportunity: Opportunity): CampaignPack {
@@ -1004,6 +1125,7 @@ function campaignToText(pack: CampaignPack) {
     `Campaign: ${pack.name}`,
     `Market: ${pack.opportunity.market}`,
     `Service: ${pack.opportunity.service}`,
+    `Opportunity Score: ${pack.opportunity.score.total}/100`,
     `Recommended launch: ${launchTypeLabels[pack.opportunity.launchType]}`,
     `Signal: ${pack.opportunity.signal}`,
     `Why it matters: ${pack.opportunity.why}`,
