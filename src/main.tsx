@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { AdminBoot } from './AdminBoot';
+import { AdminLauncher } from './AdminLauncher';
 import { CaptureBoot } from './CaptureBoot';
 import './index.css';
 import './admin.css';
@@ -11,5 +12,6 @@ createRoot(document.getElementById('root')!).render(
     <CaptureBoot />
     <AdminBoot />
     <App />
+    <AdminLauncher />
   </React.StrictMode>
 );
