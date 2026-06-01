@@ -8,6 +8,7 @@ import { HomeTrustShowcase } from './HomeTrustShowcase';
 import './index.css';
 import './premium.css';
 import './executive.css';
+import './showcase.css';
 import './mobile-fix.css';
 import './admin.css';
 
