@@ -9,6 +9,8 @@ export type WeatherSignalSummary = {
   totalPrecipIn: number;
   avgHumidity: number;
   triggers: string[];
+  nwsAlerts: string[];
+  severeAlertCount: number;
 };
 
 export type SearchIntentSignal = {
@@ -23,8 +25,9 @@ export type PublicOpportunitySignal = {
   source: 'weather' | 'search_intent' | 'permits' | 'business_openings' | 'public_bids';
   label: string;
   score: number;
-  status: 'live' | 'estimated' | 'api_ready';
+  status: 'live' | 'estimated' | 'api_ready' | 'needs_key' | 'needs_endpoint';
   detail: string;
+  count?: number;
   nextApiStep?: string;
 };
 
@@ -76,6 +79,17 @@ type ForecastResponse = {
   };
 };
 
+type IntegrationResult = {
+  count: number;
+  status: 'live' | 'needs_key' | 'needs_endpoint' | 'api_ready';
+  detail: string;
+};
+
+const env = (import.meta as unknown as { env?: Record<string, string> }).env || {};
+const samApiKey = env.VITE_SAM_API_KEY;
+const googlePlacesApiKey = env.VITE_GOOGLE_PLACES_API_KEY;
+const permitApiUrl = env.VITE_PERMIT_API_URL;
+
 const marketProfiles: Record<string, { growth: number; permitHeat: number; businessActivity: number; publicBids: number }> = {
   phoenix: { growth: 22, permitHeat: 24, businessActivity: 18, publicBids: 11 },
   mesa: { growth: 18, permitHeat: 20, businessActivity: 14, publicBids: 9 },
@@ -107,7 +121,8 @@ const industryOpportunityWeights: Record<SignalIndustry, { permits: number; busi
 
 export async function fetchLiveSignals(input: SignalRequest): Promise<LiveSignalSet> {
   const fallbackSearch = buildSearchIntent(input);
-  const fallbackPublicSignals = buildPublicSignalLayer(input, fallbackSearch);
+  const fallbackIntegrations = await fetchOptionalIntegrations(input);
+  const fallbackPublicSignals = buildPublicSignalLayer(input, fallbackSearch, undefined, fallbackIntegrations);
 
   try {
     const location = await geocodeCity(input.city);
@@ -122,11 +137,14 @@ export async function fetchLiveSignals(input: SignalRequest): Promise<LiveSignal
       };
     }
 
-    const weather = await fetchWeatherSummary(location.latitude, location.longitude, input.industry);
-    const publicSignals = buildPublicSignalLayer(input, fallbackSearch, weather);
+    const [weather, integrations] = await Promise.all([
+      fetchWeatherSummary(location.latitude, location.longitude, input.industry),
+      fetchOptionalIntegrations(input, location)
+    ]);
+    const publicSignals = buildPublicSignalLayer(input, fallbackSearch, weather, integrations);
     return {
       status: 'live',
-      source: 'Open-Meteo live weather + JobLeak public intelligence models',
+      source: 'Open-Meteo + NWS alerts + configured public data integrations',
       locationName: formatLocation(location),
       message: publicSignals.summary,
       weather,
@@ -165,9 +183,12 @@ async function fetchWeatherSummary(latitude: number, longitude: number, industry
     timezone: 'auto',
     forecast_days: '5'
   });
-  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
-  if (!response.ok) throw new Error('Forecast request failed');
-  const data = (await response.json()) as ForecastResponse;
+  const [forecastResponse, nwsAlerts] = await Promise.all([
+    fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`),
+    fetchNwsAlerts(latitude, longitude)
+  ]);
+  if (!forecastResponse.ok) throw new Error('Forecast request failed');
+  const data = (await forecastResponse.json()) as ForecastResponse;
 
   const maxTempF = round(max(data.daily?.temperature_2m_max));
   const minTempF = round(min(data.daily?.temperature_2m_min));
@@ -176,11 +197,145 @@ async function fetchWeatherSummary(latitude: number, longitude: number, industry
   const totalPrecipIn = round(sum(data.daily?.precipitation_sum), 1);
   const avgHumidity = round(avg(data.hourly?.relative_humidity_2m));
   const triggers = buildWeatherTriggers({ maxTempF, minTempF, maxWindGustMph, maxPrecipProbability, totalPrecipIn, avgHumidity }, industry);
+  const severeAlertCount = nwsAlerts.length;
+  if (severeAlertCount) triggers.push(`${severeAlertCount} active NWS alert${severeAlertCount === 1 ? '' : 's'}`);
 
-  return { maxTempF, minTempF, maxWindGustMph, maxPrecipProbability, totalPrecipIn, avgHumidity, triggers };
+  return { maxTempF, minTempF, maxWindGustMph, maxPrecipProbability, totalPrecipIn, avgHumidity, triggers, nwsAlerts, severeAlertCount };
 }
 
-function buildWeatherTriggers(weather: Omit<WeatherSignalSummary, 'triggers'>, industry: SignalIndustry) {
+async function fetchNwsAlerts(latitude: number, longitude: number): Promise<string[]> {
+  try {
+    const response = await fetch(`https://api.weather.gov/alerts/active?point=${latitude},${longitude}`, {
+      headers: { Accept: 'application/geo+json' }
+    });
+    if (!response.ok) return [];
+    const data = await response.json() as { features?: Array<{ properties?: { event?: string; severity?: string } }> };
+    return (data.features || [])
+      .map((feature) => feature.properties?.event || '')
+      .filter(Boolean)
+      .filter((event) => /thunderstorm|hail|wind|flood|tornado|winter|freeze|heat|storm|fire/i.test(event))
+      .slice(0, 5);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchOptionalIntegrations(input: SignalRequest, location?: GeoResult) {
+  const [permits, publicBids, businessOpenings] = await Promise.all([
+    fetchPermitSignal(input),
+    fetchSamBidSignal(input),
+    fetchPlacesBusinessOpenings(input, location)
+  ]);
+  return { permits, publicBids, businessOpenings };
+}
+
+async function fetchPermitSignal(input: SignalRequest): Promise<IntegrationResult> {
+  if (!permitApiUrl) {
+    return {
+      count: 0,
+      status: 'needs_endpoint',
+      detail: 'No permit endpoint configured yet. Add VITE_PERMIT_API_URL for one city/county feed at a time.'
+    };
+  }
+  try {
+    const url = permitApiUrl
+      .replaceAll('{city}', encodeURIComponent(cleanCity(input.city)))
+      .replaceAll('{industry}', encodeURIComponent(input.industry))
+      .replaceAll('{service}', encodeURIComponent(input.service || defaultService(input.industry)));
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Permit feed failed');
+    const data = await response.json();
+    const count = extractCount(data);
+    return {
+      count,
+      status: 'live',
+      detail: `${count} permit-style public records returned from configured city/county feed.`
+    };
+  } catch {
+    return {
+      count: 0,
+      status: 'api_ready',
+      detail: 'Permit endpoint is configured but did not return usable data. Check CORS, schema, or endpoint URL.'
+    };
+  }
+}
+
+async function fetchSamBidSignal(input: SignalRequest): Promise<IntegrationResult> {
+  if (!samApiKey) {
+    return {
+      count: 0,
+      status: 'needs_key',
+      detail: 'SAM.gov public opportunities API needs VITE_SAM_API_KEY or, preferably, a Supabase Edge Function proxy.'
+    };
+  }
+  try {
+    const { from, to } = lastNDaysForSam(30);
+    const title = samTitleKeyword(input.industry);
+    const url = `https://api.sam.gov/opportunities/v2/search?limit=20&api_key=${encodeURIComponent(samApiKey)}&postedFrom=${from}&postedTo=${to}&title=${encodeURIComponent(title)}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('SAM request failed');
+    const data = await response.json() as { totalRecords?: number; opportunitiesData?: unknown[] };
+    const count = data.totalRecords ?? data.opportunitiesData?.length ?? 0;
+    return {
+      count,
+      status: 'live',
+      detail: `${count} active/recent federal public opportunity records matched ${title}.`
+    };
+  } catch {
+    return {
+      count: 0,
+      status: 'api_ready',
+      detail: 'SAM.gov key is present but browser request failed. Move this call to a Supabase Edge Function if CORS blocks it.'
+    };
+  }
+}
+
+async function fetchPlacesBusinessOpenings(input: SignalRequest, location?: GeoResult): Promise<IntegrationResult> {
+  if (!googlePlacesApiKey) {
+    return {
+      count: 0,
+      status: 'needs_key',
+      detail: 'Google Places Text Search needs VITE_GOOGLE_PLACES_API_KEY or a secure backend proxy.'
+    };
+  }
+  try {
+    const city = cleanCity(input.city);
+    const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': googlePlacesApiKey,
+        'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.businessStatus,places.openingDate,places.types,places.websiteUri'
+      },
+      body: JSON.stringify({
+        textQuery: `new businesses opening in ${city}`,
+        includeFutureOpeningBusinesses: true,
+        locationBias: location ? {
+          circle: {
+            center: { latitude: location.latitude, longitude: location.longitude },
+            radius: 30000
+          }
+        } : undefined
+      })
+    });
+    if (!response.ok) throw new Error('Places request failed');
+    const data = await response.json() as { places?: unknown[] };
+    const count = data.places?.length || 0;
+    return {
+      count,
+      status: 'live',
+      detail: `${count} business opening/listing records returned by Google Places Text Search.`
+    };
+  } catch {
+    return {
+      count: 0,
+      status: 'api_ready',
+      detail: 'Google Places key is present but request failed. Restrict key correctly or move to Supabase Edge Function.'
+    };
+  }
+}
+
+function buildWeatherTriggers(weather: Omit<WeatherSignalSummary, 'triggers' | 'nwsAlerts' | 'severeAlertCount'>, industry: SignalIndustry) {
   const triggers: string[] = [];
   if ((industry === 'hvac' || industry === 'electrical') && weather.maxTempF >= 95) triggers.push(`heat ${weather.maxTempF}F`);
   if ((industry === 'hvac' || industry === 'plumbing') && weather.minTempF <= 32) triggers.push(`cold ${weather.minTempF}F`);
@@ -214,14 +369,17 @@ function buildSearchIntent(input: SignalRequest): SearchIntentSignal {
   };
 }
 
-function buildPublicSignalLayer(input: SignalRequest, search: SearchIntentSignal, weather?: WeatherSignalSummary): PublicSignalLayer {
+function buildPublicSignalLayer(input: SignalRequest, search: SearchIntentSignal, weather?: WeatherSignalSummary, integrations?: { permits: IntegrationResult; publicBids: IntegrationResult; businessOpenings: IntegrationResult }): PublicSignalLayer {
   const city = cleanCity(input.city);
   const profile = getMarketProfile(city);
   const weights = industryOpportunityWeights[input.industry];
-  const weatherScore = weather ? Math.min(30, 10 + weather.triggers.length * 8 + weatherUrgencyBoost(weather, input.industry)) : 12;
-  const permitScore = Math.min(25, Math.round(profile.permitHeat * weights.permits));
-  const businessScore = Math.min(20, Math.round(profile.businessActivity * weights.businessOpenings));
-  const bidScore = Math.min(15, Math.round(profile.publicBids * weights.bids));
+  const weatherScore = weather ? Math.min(30, 10 + weather.triggers.length * 6 + weather.severeAlertCount * 5 + weatherUrgencyBoost(weather, input.industry)) : 12;
+  const permitModelScore = Math.min(25, Math.round(profile.permitHeat * weights.permits));
+  const businessModelScore = Math.min(20, Math.round(profile.businessActivity * weights.businessOpenings));
+  const bidModelScore = Math.min(15, Math.round(profile.publicBids * weights.bids));
+  const permitScore = integrations?.permits.status === 'live' ? Math.min(25, 10 + integrations.permits.count) : permitModelScore;
+  const businessScore = integrations?.businessOpenings.status === 'live' ? Math.min(20, 8 + integrations.businessOpenings.count) : businessModelScore;
+  const bidScore = integrations?.publicBids.status === 'live' ? Math.min(15, 5 + Math.round(integrations.publicBids.count / 2)) : bidModelScore;
   const searchScore = Math.min(25, Math.round(search.score / 4));
   const totalScore = Math.min(100, weatherScore + searchScore + permitScore + businessScore + bidScore);
   const confidence: PublicSignalLayer['confidence'] = weather ? (totalScore >= 75 ? 'High' : totalScore >= 58 ? 'Medium' : 'Low') : 'Medium';
@@ -229,10 +387,11 @@ function buildPublicSignalLayer(input: SignalRequest, search: SearchIntentSignal
   const signals: PublicOpportunitySignal[] = [
     {
       source: 'weather',
-      label: weather?.triggers.length ? 'Live weather trigger' : weather ? 'Live weather baseline' : 'Weather model pending',
+      label: weather?.severeAlertCount ? 'Live NWS alert + forecast trigger' : weather?.triggers.length ? 'Live weather trigger' : weather ? 'Live weather baseline' : 'Weather model pending',
       score: weatherScore,
       status: weather ? 'live' : 'estimated',
-      detail: weather?.triggers.length ? weather.triggers.join(', ') : weather ? 'Forecast loaded with no major urgency spike.' : 'Use Open-Meteo live forecast when location resolves.'
+      count: weather?.severeAlertCount,
+      detail: weather?.nwsAlerts.length ? `NWS: ${weather.nwsAlerts.join(', ')}` : weather?.triggers.length ? weather.triggers.join(', ') : weather ? 'Forecast loaded with no major urgency spike.' : 'Use live forecast when location resolves.'
     },
     {
       source: 'search_intent',
@@ -244,36 +403,40 @@ function buildPublicSignalLayer(input: SignalRequest, search: SearchIntentSignal
     },
     {
       source: 'permits',
-      label: 'Public permit opportunity layer',
+      label: integrations?.permits.status === 'live' ? 'Live public permit feed' : 'Public permit opportunity layer',
       score: permitScore,
-      status: 'api_ready',
-      detail: `Market profile suggests ${permitScore >= 18 ? 'strong' : permitScore >= 12 ? 'moderate' : 'light'} permit-driven demand for ${input.industry}.`,
-      nextApiStep: 'Connect city/county permit open-data feeds one market at a time.'
+      status: integrations?.permits.status || 'needs_endpoint',
+      count: integrations?.permits.count,
+      detail: integrations?.permits.detail || `Market profile suggests ${permitScore >= 18 ? 'strong' : permitScore >= 12 ? 'moderate' : 'light'} permit-driven demand for ${input.industry}.`,
+      nextApiStep: integrations?.permits.status === 'needs_endpoint' ? 'Set VITE_PERMIT_API_URL for a specific city/county open-data feed.' : undefined
     },
     {
       source: 'business_openings',
-      label: 'Business opening / local activity layer',
+      label: integrations?.businessOpenings.status === 'live' ? 'Live business opening feed' : 'Business opening / local activity layer',
       score: businessScore,
-      status: 'api_ready',
-      detail: `Tracks future signals from new businesses, local listings, remodels, and service-area expansion patterns.`,
-      nextApiStep: 'Connect Google Places or approved business listing providers; do not scrape private data.'
+      status: integrations?.businessOpenings.status || 'needs_key',
+      count: integrations?.businessOpenings.count,
+      detail: integrations?.businessOpenings.detail || 'Tracks future signals from new businesses, local listings, remodels, and service-area expansion patterns.',
+      nextApiStep: integrations?.businessOpenings.status === 'needs_key' ? 'Set VITE_GOOGLE_PLACES_API_KEY or use a Supabase Edge Function proxy.' : undefined
     },
     {
       source: 'public_bids',
-      label: 'Public contracts and bid listings layer',
+      label: integrations?.publicBids.status === 'live' ? 'Live SAM.gov public bids' : 'Public contracts and bid listings layer',
       score: bidScore,
-      status: 'api_ready',
-      detail: `Designed for government/public bid opportunities where licensed contractors can respond legally.`,
-      nextApiStep: 'Connect SAM.gov, city procurement portals, or state bid feeds where available.'
+      status: integrations?.publicBids.status || 'needs_key',
+      count: integrations?.publicBids.count,
+      detail: integrations?.publicBids.detail || 'Designed for government/public bid opportunities where licensed contractors can respond legally.',
+      nextApiStep: integrations?.publicBids.status === 'needs_key' ? 'Set VITE_SAM_API_KEY or use a Supabase Edge Function proxy.' : undefined
     }
   ];
 
   const strongest = signals.slice().sort((a, b) => b.score - a.score)[0];
+  const liveCount = signals.filter((signal) => signal.status === 'live').length;
   return {
     totalScore,
     confidence,
     signals,
-    summary: `${confidence} public opportunity score ${totalScore}/100. Strongest layer: ${strongest.label}. ${strongest.detail}`
+    summary: `${confidence} public opportunity score ${totalScore}/100. ${liveCount} live source${liveCount === 1 ? '' : 's'} active. Strongest layer: ${strongest.label}. ${strongest.detail}`
   };
 }
 
@@ -285,7 +448,48 @@ function weatherUrgencyBoost(weather: WeatherSignalSummary, industry: SignalIndu
   if (industry === 'plumbing' && weather.minTempF <= 28) return 10;
   if (industry === 'plumbing' && weather.maxPrecipProbability >= 70) return 6;
   if (industry === 'pest' && weather.avgHumidity >= 65 && weather.maxTempF >= 75) return 8;
+  if (weather.severeAlertCount) return 5;
   return 0;
+}
+
+function extractCount(data: unknown): number {
+  if (Array.isArray(data)) return data.length;
+  if (data && typeof data === 'object') {
+    const record = data as Record<string, unknown>;
+    if (typeof record.total === 'number') return record.total;
+    if (typeof record.count === 'number') return record.count;
+    if (typeof record.totalRecords === 'number') return record.totalRecords;
+    if (Array.isArray(record.results)) return record.results.length;
+    if (Array.isArray(record.features)) return record.features.length;
+    if (Array.isArray(record.data)) return record.data.length;
+  }
+  return 0;
+}
+
+function lastNDaysForSam(days: number) {
+  const toDate = new Date();
+  const fromDate = new Date();
+  fromDate.setDate(toDate.getDate() - days);
+  return { from: formatSamDate(fromDate), to: formatSamDate(toDate) };
+}
+
+function formatSamDate(date: Date) {
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const yyyy = date.getFullYear();
+  return `${mm}/${dd}/${yyyy}`;
+}
+
+function samTitleKeyword(industry: SignalIndustry) {
+  const map: Record<SignalIndustry, string> = {
+    hvac: 'HVAC',
+    roofing: 'roof',
+    plumbing: 'plumbing',
+    electrical: 'electrical',
+    pest: 'pest',
+    garage: 'garage door'
+  };
+  return map[industry];
 }
 
 function getMarketProfile(city: string) {
