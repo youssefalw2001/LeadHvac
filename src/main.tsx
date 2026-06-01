@@ -5,6 +5,7 @@ import { AdminBoot } from './AdminBoot';
 import { AdminLauncher } from './AdminLauncher';
 import { CaptureBoot } from './CaptureBoot';
 import { HomeTrustShowcase } from './HomeTrustShowcase';
+import './tailwind.css';
 import './index.css';
 import './premium.css';
 import './executive.css';
