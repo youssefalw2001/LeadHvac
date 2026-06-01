@@ -1,10 +1,9 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App';
 import { AdminBoot } from './AdminBoot';
 import { AdminLauncher } from './AdminLauncher';
 import { CaptureBoot } from './CaptureBoot';
-import { HomeTrustShowcase } from './HomeTrustShowcase';
+import { PublicAppRouter } from './PublicAppRouter';
 import './tailwind.css';
 import './index.css';
 import './premium.css';
@@ -17,8 +16,7 @@ createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <CaptureBoot />
     <AdminBoot />
-    <App />
-    <HomeTrustShowcase />
+    <PublicAppRouter />
     <AdminLauncher />
   </React.StrictMode>
 );
