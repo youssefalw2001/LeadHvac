@@ -7,6 +7,7 @@ import { CaptureBoot } from './CaptureBoot';
 import './index.css';
 import './premium.css';
 import './executive.css';
+import './mobile-fix.css';
 import './admin.css';
 
 createRoot(document.getElementById('root')!).render(
