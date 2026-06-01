@@ -5,7 +5,6 @@ import { AdminBoot } from './AdminBoot';
 import { AdminLauncher } from './AdminLauncher';
 import { CaptureBoot } from './CaptureBoot';
 import './index.css';
-import './launch-dark.css';
 import './admin.css';
 
 createRoot(document.getElementById('root')!).render(
