@@ -4,6 +4,7 @@ import App from './App';
 import { AdminBoot } from './AdminBoot';
 import { AdminLauncher } from './AdminLauncher';
 import { CaptureBoot } from './CaptureBoot';
+import { HomeTrustShowcase } from './HomeTrustShowcase';
 import './index.css';
 import './premium.css';
 import './executive.css';
@@ -15,6 +16,7 @@ createRoot(document.getElementById('root')!).render(
     <CaptureBoot />
     <AdminBoot />
     <App />
+    <HomeTrustShowcase />
     <AdminLauncher />
   </React.StrictMode>
 );
