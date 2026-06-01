@@ -1,0 +1,328 @@
+/* Safe JobLeak launch polish: keeps existing React/Supabase/admin logic intact. */
+
+:root {
+  --ink: #f5f5fb;
+  --muted: #9aa0b8;
+  --blue: #ff6b35;
+  --blue-dark: #ff3366;
+  --green: #22c55e;
+  --orange: #ff6b35;
+  --purple: #a855f7;
+  --teal: #14b8a6;
+  --bg: #0a0a0f;
+  --line: rgba(255,255,255,0.09);
+  --soft: rgba(255,255,255,0.04);
+  --shadow: 0 30px 100px rgba(0, 0, 0, 0.38);
+  --card-shadow: 0 16px 50px rgba(0, 0, 0, 0.22);
+}
+
+body {
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 10% -10%, rgba(255, 107, 53, 0.18), transparent 34%),
+    radial-gradient(circle at 90% 0%, rgba(79, 156, 249, 0.14), transparent 30%),
+    radial-gradient(circle at 70% 90%, rgba(168, 85, 247, 0.10), transparent 32%),
+    #0a0a0f;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.18;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 220 220' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+}
+
+#root { position: relative; z-index: 1; }
+
+.nav,
+.simple-top {
+  background: rgba(10, 10, 15, 0.82);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(22px);
+}
+
+.brand { color: var(--ink); }
+.brand-mark {
+  border-radius: 13px;
+  background: linear-gradient(135deg, #ff6b35, #ff3366);
+  box-shadow: 0 16px 36px rgba(255, 107, 53, 0.28);
+}
+.brand span { color: #ff8a60; }
+
+.desktop-links button,
+footer button,
+.lead-row button {
+  color: #9aa0b8;
+}
+.desktop-links button:hover,
+footer button:hover {
+  color: #ff8a60;
+}
+.mobile-menu,
+.mobile-panel,
+.mobile-panel button {
+  background: #10101a;
+  border-color: rgba(255,255,255,0.1);
+  color: var(--ink);
+}
+
+.primary {
+  background: linear-gradient(135deg, #ff6b35, #ff3366);
+  color: white;
+  box-shadow: 0 18px 42px rgba(255, 107, 53, 0.25);
+}
+.primary:hover {
+  background: linear-gradient(135deg, #ff7a48, #ff4778);
+}
+.secondary {
+  background: rgba(255,255,255,0.06);
+  color: #f5f5fb;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.secondary:hover {
+  border-color: rgba(255,107,53,0.55);
+  background: rgba(255,107,53,0.1);
+}
+
+.white,
+.muted {
+  background: transparent;
+}
+.dark {
+  background: rgba(255,255,255,0.035);
+  border-top: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.hero {
+  padding-top: 98px;
+  position: relative;
+}
+.hero::after {
+  content: '';
+  position: absolute;
+  right: 4%;
+  top: 12%;
+  width: 360px;
+  height: 360px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255,107,53,0.18), transparent 68%);
+  filter: blur(4px);
+  pointer-events: none;
+}
+.hero-copy .eyebrow {
+  color: #ff8a60;
+  background: rgba(255,107,53,0.11);
+  border: 1px solid rgba(255,107,53,0.25);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 0;
+}
+.hero-copy .eyebrow svg { display: none; }
+.hero-copy .eyebrow::after {
+  content: 'SIGNAL. SCORE. LAUNCH.';
+  font-size: 12px;
+  letter-spacing: 0.16em;
+}
+.hero-copy h1 {
+  color: #f5f5fb;
+  text-wrap: balance;
+}
+.hero-copy h1::first-line {
+  color: #fff;
+}
+.hero-copy p,
+.section-head p,
+.centered > p,
+.split p,
+p {
+  color: #9aa0b8;
+}
+
+.trust-row span,
+.check-list div,
+.tool-card,
+.feature-card,
+.industry-card,
+.scan-card,
+.login-card,
+.price-card,
+.stat-card,
+.panel,
+.opportunity-card,
+.signal-card,
+.pack-panel,
+.copy-block,
+.radar-controls {
+  background: rgba(255,255,255,0.045);
+  border-color: rgba(255,255,255,0.09);
+  color: #f5f5fb;
+  box-shadow: var(--card-shadow);
+}
+.trust-row span,
+.industry-card li,
+.price-card li,
+.copy-block p,
+.opp-meta,
+.action-row,
+.lead-row,
+.signal-card p {
+  color: #9aa0b8;
+}
+.tool-card strong,
+.feature-card strong,
+.copy-block strong,
+.price-card h3,
+.panel h2,
+.panel strong,
+.stat-card strong,
+.opp-details strong,
+.opportunity-card p strong,
+label {
+  color: #f5f5fb;
+}
+
+.metric-strip {
+  background: rgba(255,255,255,0.035);
+  border-top: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.metric-grid strong,
+.price {
+  color: #ff8a60;
+}
+
+.radar-preview,
+.campaign-summary,
+.final-cta,
+.dark-card {
+  background: linear-gradient(145deg, #10101a, #08080d);
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: var(--shadow);
+}
+.radar-preview::before {
+  background:
+    radial-gradient(circle at 85% 0%, rgba(255,107,53,0.32), transparent 35%),
+    radial-gradient(circle at 0% 100%, rgba(168,85,247,0.24), transparent 36%);
+}
+
+.label,
+.eyebrow,
+.pack-header svg,
+.tool-card svg,
+.feature-card svg,
+.stat-card strong,
+.signal-card svg {
+  color: #ff8a60;
+}
+.green,
+.dark .green { color: #22c55e; }
+
+input,
+select,
+textarea {
+  background: rgba(255,255,255,0.065);
+  color: #f5f5fb;
+  border-color: rgba(255,255,255,0.11);
+}
+input::placeholder,
+textarea::placeholder { color: #69708a; }
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(255,107,53,0.75);
+  box-shadow: 0 0 0 4px rgba(255,107,53,0.11);
+}
+select option {
+  color: #10101a;
+}
+
+.score-pill,
+.summary-score {
+  background: linear-gradient(135deg, #ff6b35, #ff3366);
+  box-shadow: 0 18px 42px rgba(255,107,53,0.24);
+}
+.score-line b {
+  background: linear-gradient(90deg, #ff6b35, #ff3366);
+}
+.score-line i {
+  background: rgba(255,255,255,0.08);
+}
+.signal-box,
+.opp-details div,
+.score-breakdown,
+.copy-block p,
+.checklist-list div,
+.action-row,
+.lead-row,
+.tracker-card,
+.summary-card,
+.mini-pack div,
+.dark-note {
+  background: rgba(255,255,255,0.055);
+  border-color: rgba(255,255,255,0.09);
+}
+.signal-box {
+  color: #d8d8e8;
+  border-color: rgba(255,107,53,0.18);
+}
+.confidence {
+  color: #22c55e;
+  background: rgba(34,197,94,0.12);
+}
+.launch-badge.google-search { background: #4f9cf9; }
+.launch-badge.lsa { background: #a855f7; }
+.launch-badge.reactivation { background: #14b8a6; }
+
+.weather-strip {
+  background: rgba(34,197,94,0.08);
+  border-color: rgba(34,197,94,0.22);
+}
+.weather-strip span {
+  color: #22c55e;
+}
+.weather-strip strong {
+  background: rgba(255,255,255,0.07);
+}
+
+.industry-card {
+  overflow: hidden;
+}
+.industry-art.orange { background: linear-gradient(135deg, #ff6b35, #ff3366); }
+.industry-art.blue { background: linear-gradient(135deg, #4f9cf9, #2455d6); }
+.industry-art.green { background: linear-gradient(135deg, #22c55e, #047857); }
+.industry-art.purple { background: linear-gradient(135deg, #a855f7, #6d28d9); }
+.industry-art.teal { background: linear-gradient(135deg, #14b8a6, #0f766e); }
+.industry-art.slate { background: linear-gradient(135deg, #94a3b8, #334155); }
+
+.tabs button {
+  background: rgba(255,255,255,0.06);
+  color: #9aa0b8;
+  border-color: rgba(255,255,255,0.1);
+}
+.tabs button.active {
+  background: linear-gradient(135deg, #ff6b35, #ff3366);
+  border-color: transparent;
+  color: white;
+}
+
+.price-card.popular {
+  border-color: rgba(255,107,53,0.45);
+  background: rgba(255,107,53,0.06);
+}
+.popular-badge {
+  background: linear-gradient(135deg, #ff6b35, #ff3366);
+}
+
+footer {
+  background: rgba(10,10,15,0.82);
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+@media (max-width: 700px) {
+  .hero { padding-top: 68px; }
+  .hero-copy .eyebrow::after { font-size: 11px; }
+}
