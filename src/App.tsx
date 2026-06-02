@@ -184,6 +184,12 @@ const campaignEngines: Array<{ title: string; text: string; Icon: LucideIcon }> 
   { title: 'Reactivation + Retargeting', text: 'For past customers, old estimates, site visitors, and opted-in customer lists.', Icon: Users }
 ];
 
+const workflowSteps: Array<{ title: string; text: string; Icon: LucideIcon }> = [
+  { title: '1. Select market', Icon: MapPin, text: 'Choose industry, city, and service type.' },
+  { title: '2. Pull signals', Icon: Target, text: 'Check weather, NWS, search intent, and configurable public layers.' },
+  { title: '3. Track results', Icon: Megaphone, text: 'Launch the campaign and add calls/jobs.' }
+];
+
 function App() {
   const [route, setRoute] = useState<Route>(() => getRoute());
   const [scan, setScan] = useState<ScanInput>(defaultScan);
@@ -296,7 +302,7 @@ function Home({ go, onScan, openCampaign, scan }: { go: (r: Route) => void; onSc
       </section>
       <section className="metric-strip"><div className="container metric-grid">{[['Live', 'weather signals'], ['3', 'ranked opportunities'], ['1 click', 'campaign pack'], ['$199', 'Growth plan target']].map(([n, l]) => <div key={l}><strong>{n}</strong><span>{l}</span></div>)}</div></section>
       <section id="platform" className="section white"><div className="container split"><div><div className="label">The product</div><h2>One screen tells owners what jobs to chase this week.</h2><p>Contractors should not need to understand analytics. JobLeak pulls signals, scores the opportunity, explains why it matters, and generates the launch assets.</p><div className="check-list">{['Live weather triggers from selected city', 'Search-intent estimate now, Google Ads API later', 'Recommend the best of 3 launch engines', 'Track calls and booked jobs after launch'].map((x) => <div key={x}><Check size={18} /> {x}</div>)}</div></div><div className="tool-grid">{campaignEngines.map(({ title, text, Icon }) => <div className="tool-card" key={title}><Icon size={25} /><strong>{title}</strong><p>{text}</p></div>)}</div></div></section>
-      <section className="section muted"><div className="container centered"><div className="label">How it works</div><h2>Signal to campaign to proof.</h2><p>The product loop is simple: live signal, ranked opportunity, instant campaign, tracked result.</p><div className="feature-grid">{[['1. Select market', MapPin, 'Choose industry, city, and service type.'], ['2. Pull signals', Target, 'Fetch weather and search-intent data.'], ['3. Track results', Megaphone, 'Launch the campaign and add calls/jobs.']].map(([title, Icon, text]) => <div className="feature-card" key={title as string}><Icon size={26} /><strong>{title as string}</strong><p>{text as string}</p></div>)}</div></div></section>
+      <section className="section muted"><div className="container centered"><div className="label">How it works</div><h2>Signal to campaign to proof.</h2><p>The product loop is simple: live signal, ranked opportunity, instant campaign, tracked result.</p><div className="feature-grid">{workflowSteps.map(({ title, Icon, text }) => <div className="feature-card" key={title}><Icon size={26} /><strong>{title}</strong><p>{text}</p></div>)}</div></div></section>
       <section id="industries" className="section white"><div className="container"><div className="section-head"><div><div className="label">Industries</div><h2>Built for urgent home-service demand.</h2></div><p>Start with trades where weather, search intent, and trust signals turn into booked jobs quickly.</p></div><div className="industry-grid">{(Object.keys(industryLabels) as Industry[]).map((key) => <IndustryCard key={key} industry={key} />)}</div></div></section>
       <section id="scan" className="section dark"><div className="container split"><div><div className="label green">Live scan</div><h2>Start with weather and search intent.</h2><p>The form still saves scan requests to your existing Supabase table and opens a live city forecast scan.</p><div className="dark-note"><Clock size={20} /> No private homeowner scraping. No spam tools. Own-list SMS only.</div></div><ScanForm onScan={onScan} /></div></section>
       <Pricing />
