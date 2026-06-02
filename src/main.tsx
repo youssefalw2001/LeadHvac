@@ -5,6 +5,7 @@ import { AdminLauncher } from './AdminLauncher';
 import { CaptureBoot } from './CaptureBoot';
 import { FourTradeModeBoot } from './FourTradeModeBoot';
 import { PublicAppRouter } from './PublicAppRouter';
+import { RadarLoadingBoot } from './RadarLoadingBoot';
 import { RadarSourcePanelBoot } from './RadarSourcePanelBoot';
 import './tailwind.css';
 import './index.css';
@@ -21,6 +22,7 @@ createRoot(document.getElementById('root')!).render(
     <CaptureBoot />
     <AdminBoot />
     <FourTradeModeBoot />
+    <RadarLoadingBoot />
     <RadarSourcePanelBoot />
     <PublicAppRouter />
     <AdminLauncher />
