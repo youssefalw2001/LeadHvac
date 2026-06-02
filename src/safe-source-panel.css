@@ -1,0 +1,134 @@
+.safe-source-panel {
+  margin: 0 0 20px;
+  border: 1px solid #dfe6f0;
+  border-radius: 28px;
+  padding: 22px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 18px 42px rgba(8, 17, 31, 0.07);
+  backdrop-filter: blur(18px);
+}
+
+.safe-source-panel-head {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 24px;
+  align-items: end;
+  margin-bottom: 18px;
+}
+
+.safe-source-panel-head span {
+  display: block;
+  color: #2f6df6;
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.safe-source-panel-head h2 {
+  margin: 8px 0 0;
+  color: #08111f;
+  font-size: clamp(26px, 3vw, 38px);
+  line-height: 1.04;
+  letter-spacing: -0.045em;
+}
+
+.safe-source-panel-head p {
+  margin: 0;
+  color: #526074;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.65;
+}
+
+.safe-source-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.safe-source-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: start;
+  min-height: 112px;
+  border: 1px solid #e7edf6;
+  border-radius: 22px;
+  padding: 16px;
+  background: #fbfdff;
+}
+
+.safe-source-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 15px;
+  color: #2f6df6;
+  background: #edf4ff;
+  font-weight: 950;
+}
+
+.safe-source-row strong {
+  display: block;
+  color: #08111f;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.safe-source-row p {
+  margin: 6px 0 0;
+  color: #526074;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.safe-source-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 7px 10px;
+  white-space: nowrap;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.safe-source-status.live {
+  color: #047857;
+  background: #ecfdf5;
+}
+
+.safe-source-status.estimated,
+.safe-source-status.configurable {
+  color: #174ea6;
+  background: #edf4ff;
+}
+
+@media (max-width: 900px) {
+  .safe-source-panel-head,
+  .safe-source-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .safe-source-panel {
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .safe-source-row {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .safe-source-status {
+    width: fit-content;
+  }
+}
