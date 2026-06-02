@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Clock,
   Copy,
+  FileSearch,
   FileText,
   Gauge,
   ListChecks,
@@ -35,6 +36,7 @@ type Confidence = 'High' | 'Medium' | 'Rising';
 type LaunchType = 'google-search' | 'lsa' | 'reactivation';
 type CampaignTab = 'google-search' | 'lsa' | 'reactivation' | 'checklist' | 'tracking';
 type CampaignStage = 'Draft' | 'Launched' | 'Calls Added' | 'Booked Jobs Added';
+type SourceStatus = 'Live' | 'Loading' | 'Estimated' | 'Configurable' | 'Configured';
 
 type ScanInput = {
   businessName: string;
@@ -99,6 +101,12 @@ type Playbook = {
 
 type CampaignPack = ReturnType<typeof generateCampaignPack>;
 
+type SignalSourceView = {
+  name: string;
+  status: SourceStatus;
+  detail: string;
+};
+
 const industryLabels: Record<Industry, string> = {
   roofing: 'Roofing',
   hvac: 'HVAC',
@@ -147,12 +155,33 @@ const playbooks: Record<Industry, Playbook> = {
   }
 };
 
-const defaultScan: ScanInput = { businessName: 'Phoenix Comfort Pros', industry: 'hvac', city: 'Phoenix, AZ', service: 'AC Repair', website: 'phoenixcomfortpros.com', email: 'owner@example.com', phone: '(602) 555-0199', goal: 'More emergency AC repair calls this week.' };
-const launchTypeLabels: Record<LaunchType, string> = { 'google-search': 'Google Search Campaign', lsa: 'Google Local Services Pack', reactivation: 'Reactivation + Retargeting' };
+const defaultScan: ScanInput = {
+  businessName: 'Phoenix Comfort Pros',
+  industry: 'hvac',
+  city: 'Phoenix, AZ',
+  service: 'AC Repair',
+  website: 'phoenixcomfortpros.com',
+  email: 'owner@example.com',
+  phone: '(602) 555-0199',
+  goal: 'More emergency AC repair calls this week.'
+};
+
+const launchTypeLabels: Record<LaunchType, string> = {
+  'google-search': 'Google Search Campaign',
+  lsa: 'Google Local Services Pack',
+  reactivation: 'Reactivation + Retargeting'
+};
+
 const pricing = [
   ['Starter', '$99', 'For contractors who want to know what local jobs to chase this week.', ['Opportunity Radar', 'Weather signal scan', 'Suggested offers', 'Basic campaign ideas']],
   ['Growth', '$199', 'For contractors who want JobLeak to generate the ads and campaign assets.', ['Live weather radar', 'Instant Campaign Packs', 'Google Search assets', 'Email, SMS, and call scripts']],
   ['Pro', '$299', 'For teams that want campaigns, lead inbox, and launch tracking.', ['Everything in Growth', 'Lead Inbox', 'Campaign history', 'Launch checklist tracking']]
+] as const;
+
+const campaignEngines: Array<{ title: string; text: string; Icon: LucideIcon }> = [
+  { title: 'Google Search Campaigns', text: 'For urgent, ready-to-call searches like emergency AC repair, roof leak, or drain cleaning.', Icon: Search },
+  { title: 'Google Local Services Pack', text: 'For top placement, trust, reviews, service areas, and fast lead handling.', Icon: Star },
+  { title: 'Reactivation + Retargeting', text: 'For past customers, old estimates, site visitors, and opted-in customer lists.', Icon: Users }
 ];
 
 function App() {
@@ -167,43 +196,119 @@ function App() {
     return () => window.removeEventListener('hashchange', syncRoute);
   }, []);
 
-  function go(next: Route) { setRoute(next); window.location.hash = next; window.scrollTo({ top: 0, behavior: 'smooth' }); }
-  function startScan(input: ScanInput) { setScan(input); setSelectedOpportunity(buildOpportunities(input, liveSignals)[0]); go('radar'); }
-  function openCampaign(opportunity: Opportunity) { setSelectedOpportunity(opportunity); go('campaign'); }
+  function go(next: Route) {
+    setRoute(next);
+    window.location.hash = next;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function startScan(input: ScanInput) {
+    setScan(input);
+    setSelectedOpportunity(buildOpportunities(input, liveSignals)[0]);
+    go('radar');
+  }
+
+  function openCampaign(opportunity: Opportunity) {
+    setSelectedOpportunity(opportunity);
+    go('campaign');
+  }
 
   const activeOpportunity = selectedOpportunity || buildOpportunities(scan, liveSignals)[0];
 
-  return <div>
-    {route === 'home' && <Home go={go} onScan={startScan} openCampaign={openCampaign} scan={scan} />}
-    {(route === 'radar' || route === 'report') && <OpportunityRadar go={go} scan={scan} setScan={setScan} liveSignals={liveSignals} setLiveSignals={setLiveSignals} openCampaign={openCampaign} />}
-    {route === 'campaign' && <CampaignPage go={go} opportunity={activeOpportunity} />}
-    {route === 'login' && <Login go={go} />}
-    {route === 'dashboard' && <Dashboard go={go} scan={scan} liveSignals={liveSignals} openCampaign={openCampaign} />}
-  </div>;
+  return (
+    <div>
+      {route === 'home' && <Home go={go} onScan={startScan} openCampaign={openCampaign} scan={scan} />}
+      {(route === 'radar' || route === 'report') && <OpportunityRadar go={go} scan={scan} setScan={setScan} liveSignals={liveSignals} setLiveSignals={setLiveSignals} openCampaign={openCampaign} />}
+      {route === 'campaign' && <CampaignPage go={go} opportunity={activeOpportunity} />}
+      {route === 'login' && <Login go={go} />}
+      {route === 'dashboard' && <Dashboard go={go} scan={scan} liveSignals={liveSignals} openCampaign={openCampaign} />}
+    </div>
+  );
 }
 
-function getRoute(): Route { const hash = window.location.hash.replace('#', '') as Route; return ['home', 'radar', 'campaign', 'login', 'dashboard', 'report'].includes(hash) ? hash : 'home'; }
-function Logo() { return <button className="brand" onClick={() => (window.location.hash = '#home')}><div className="brand-mark"><TrendingUp size={22} /></div><div><strong>JobLeak</strong><span>Opportunity Radar</span></div></button>; }
+function getRoute(): Route {
+  const hash = window.location.hash.replace('#', '') as Route;
+  return ['home', 'radar', 'campaign', 'login', 'dashboard', 'report'].includes(hash) ? hash : 'home';
+}
+
+function Logo() {
+  return (
+    <button className="brand" onClick={() => (window.location.hash = '#home')}>
+      <div className="brand-mark"><TrendingUp size={22} /></div>
+      <div><strong>JobLeak</strong><span>Opportunity Radar</span></div>
+    </button>
+  );
+}
 
 function Nav({ go }: { go: (r: Route) => void }) {
   const [open, setOpen] = useState(false);
-  const navItems: Array<[string, () => void]> = [['Opportunity Radar', () => go('radar')], ['Campaign Generator', () => go('campaign')], ['Industries', () => scrollHomeSection('industries', go)], ['Pricing', () => scrollHomeSection('pricing', go)], ['Admin Inbox', () => { window.location.hash = '#admin'; }], ['Login', () => go('login')]];
-  return <header className="nav"><div className="container nav-inner"><Logo /><nav className="desktop-links">{navItems.map(([label, action]) => <button key={label} onClick={action}>{label}</button>)}</nav><button className="primary small" onClick={() => go('radar')}>Generate Opportunity Scan</button><button className="mobile-menu" onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button></div>{open && <div className="mobile-panel">{navItems.map(([label, action]) => <button key={label} onClick={() => { setOpen(false); action(); }}>{label}</button>)}</div>}</header>;
+  const navItems: Array<[string, () => void]> = [
+    ['Opportunity Radar', () => go('radar')],
+    ['Campaign Generator', () => go('campaign')],
+    ['Industries', () => scrollHomeSection('industries', go)],
+    ['Pricing', () => scrollHomeSection('pricing', go)],
+    ['Admin Inbox', () => { window.location.hash = '#admin'; }],
+    ['Login', () => go('login')]
+  ];
+
+  return (
+    <header className="nav">
+      <div className="container nav-inner">
+        <Logo />
+        <nav className="desktop-links">{navItems.map(([label, action]) => <button key={label} onClick={action}>{label}</button>)}</nav>
+        <button className="primary small" onClick={() => go('radar')}>Generate Opportunity Scan</button>
+        <button className="mobile-menu" onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button>
+      </div>
+      {open && <div className="mobile-panel">{navItems.map(([label, action]) => <button key={label} onClick={() => { setOpen(false); action(); }}>{label}</button>)}</div>}
+    </header>
+  );
 }
-function scrollHomeSection(id: string, go: (r: Route) => void) { if (window.location.hash.replace('#', '') !== 'home') { go('home'); setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80); } else document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+
+function scrollHomeSection(id: string, go: (r: Route) => void) {
+  if (window.location.hash.replace('#', '') !== 'home') {
+    go('home');
+    setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+    return;
+  }
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 
 function Home({ go, onScan, openCampaign, scan }: { go: (r: Route) => void; onScan: (input: ScanInput) => void; openCampaign: (opportunity: Opportunity) => void; scan: ScanInput }) {
   const heroOpportunity = buildOpportunities(scan, null)[0];
-  return <main><Nav go={go} /><section className="hero section"><div className="container hero-grid"><div className="hero-copy"><div className="eyebrow"><ShieldCheck size={16} /> AI opportunity radar for home services</div><h1>Find local job opportunities before your competitors do.</h1><p>JobLeak uses live weather signals and search-intent scoring to turn local demand into Google ads, Local Services checklists, reactivation messages, and call scripts.</p><div className="cta-row"><button className="primary" onClick={() => go('radar')}>Generate Live Opportunity Scan <ArrowRight size={18} /></button><button className="secondary" onClick={() => openCampaign(heroOpportunity)}>Generate Google Campaign Pack</button></div><div className="trust-row">{['Live weather radar', 'Search-intent estimate', 'Campaign proof tracking'].map((x) => <span key={x}><Check size={14} /> {x}</span>)}</div></div><OpportunityPreview opportunity={heroOpportunity} openCampaign={openCampaign} /></div></section><section className="metric-strip"><div className="container metric-grid">{[['Live', 'weather signals'], ['3', 'ranked opportunities'], ['1 click', 'campaign pack'], ['$199', 'Growth plan target']].map(([n, l]) => <div key={l}><strong>{n}</strong><span>{l}</span></div>)}</div></section><section id="platform" className="section white"><div className="container split"><div><div className="label">The product</div><h2>One screen tells owners what jobs to chase this week.</h2><p>Contractors should not need to understand analytics. JobLeak pulls signals, scores the opportunity, explains why it matters, and generates the launch assets.</p><div className="check-list">{['Live weather triggers from selected city', 'Search-intent estimate now, Google Ads API later', 'Recommend the best of 3 launch engines', 'Track calls and booked jobs after launch'].map((x) => <div key={x}><Check size={18} /> {x}</div>)}</div></div><div className="tool-grid">{campaignEngines.map(({ title, text, Icon }) => <div className="tool-card" key={title}><Icon size={25} /><strong>{title}</strong><p>{text}</p></div>)}</div></div></section><section className="section muted"><div className="container centered"><div className="label">How it works</div><h2>Signal to campaign to proof.</h2><p>The product loop is simple: live signal, ranked opportunity, instant campaign, tracked result.</p><div className="feature-grid">{[['1. Select market', MapPin, 'Choose industry, city, and service type.'], ['2. Pull signals', Target, 'Fetch weather and search-intent data.'], ['3. Track results', Megaphone, 'Launch the campaign and add calls/jobs.']].map(([title, Icon, text]) => <div className="feature-card" key={title as string}><Icon size={26} /><strong>{title as string}</strong><p>{text as string}</p></div>)}</div></div></section><section id="industries" className="section white"><div className="container"><div className="section-head"><div><div className="label">Industries</div><h2>Built for urgent home-service demand.</h2></div><p>Start with trades where weather, search intent, and trust signals turn into booked jobs quickly.</p></div><div className="industry-grid">{(Object.keys(industryLabels) as Industry[]).map((key) => <IndustryCard key={key} industry={key} />)}</div></div></section><section id="scan" className="section dark"><div className="container split"><div><div className="label green">Live scan</div><h2>Start with weather and search intent.</h2><p>The form still saves scan requests to your existing Supabase table and opens a live city forecast scan.</p><div className="dark-note"><Clock size={20} /> No private homeowner scraping. No spam tools. Own-list SMS only.</div></div><ScanForm onScan={onScan} /></div></section><Pricing /><section className="container final-cta"><div><h2>Give contractors the campaign to run today.</h2><p>JobLeak answers the question: what local jobs should I go after this week?</p></div><button className="primary" onClick={() => go('radar')}>Open Opportunity Radar <ChevronRight size={18} /></button></section><Footer go={go} /></main>;
+
+  return (
+    <main>
+      <Nav go={go} />
+      <section className="hero section">
+        <div className="container hero-grid">
+          <div className="hero-copy">
+            <div className="eyebrow"><ShieldCheck size={16} /> AI opportunity radar for home services</div>
+            <h1>Find local job opportunities before your competitors do.</h1>
+            <p>JobLeak uses public/local demand signals to turn weekly opportunity into Google ads, Local Services checklists, reactivation messages, and call scripts.</p>
+            <div className="cta-row">
+              <button className="primary" onClick={() => go('radar')}>Generate Live Opportunity Scan <ArrowRight size={18} /></button>
+              <button className="secondary" onClick={() => openCampaign(heroOpportunity)}>Generate Google Campaign Pack</button>
+            </div>
+            <div className="trust-row">{['Live weather radar', 'Search-intent estimate', 'Campaign proof tracking'].map((x) => <span key={x}><Check size={14} /> {x}</span>)}</div>
+          </div>
+          <OpportunityPreview opportunity={heroOpportunity} openCampaign={openCampaign} />
+        </div>
+      </section>
+      <section className="metric-strip"><div className="container metric-grid">{[['Live', 'weather signals'], ['3', 'ranked opportunities'], ['1 click', 'campaign pack'], ['$199', 'Growth plan target']].map(([n, l]) => <div key={l}><strong>{n}</strong><span>{l}</span></div>)}</div></section>
+      <section id="platform" className="section white"><div className="container split"><div><div className="label">The product</div><h2>One screen tells owners what jobs to chase this week.</h2><p>Contractors should not need to understand analytics. JobLeak pulls signals, scores the opportunity, explains why it matters, and generates the launch assets.</p><div className="check-list">{['Live weather triggers from selected city', 'Search-intent estimate now, Google Ads API later', 'Recommend the best of 3 launch engines', 'Track calls and booked jobs after launch'].map((x) => <div key={x}><Check size={18} /> {x}</div>)}</div></div><div className="tool-grid">{campaignEngines.map(({ title, text, Icon }) => <div className="tool-card" key={title}><Icon size={25} /><strong>{title}</strong><p>{text}</p></div>)}</div></div></section>
+      <section className="section muted"><div className="container centered"><div className="label">How it works</div><h2>Signal to campaign to proof.</h2><p>The product loop is simple: live signal, ranked opportunity, instant campaign, tracked result.</p><div className="feature-grid">{[['1. Select market', MapPin, 'Choose industry, city, and service type.'], ['2. Pull signals', Target, 'Fetch weather and search-intent data.'], ['3. Track results', Megaphone, 'Launch the campaign and add calls/jobs.']].map(([title, Icon, text]) => <div className="feature-card" key={title as string}><Icon size={26} /><strong>{title as string}</strong><p>{text as string}</p></div>)}</div></div></section>
+      <section id="industries" className="section white"><div className="container"><div className="section-head"><div><div className="label">Industries</div><h2>Built for urgent home-service demand.</h2></div><p>Start with trades where weather, search intent, and trust signals turn into booked jobs quickly.</p></div><div className="industry-grid">{(Object.keys(industryLabels) as Industry[]).map((key) => <IndustryCard key={key} industry={key} />)}</div></div></section>
+      <section id="scan" className="section dark"><div className="container split"><div><div className="label green">Live scan</div><h2>Start with weather and search intent.</h2><p>The form still saves scan requests to your existing Supabase table and opens a live city forecast scan.</p><div className="dark-note"><Clock size={20} /> No private homeowner scraping. No spam tools. Own-list SMS only.</div></div><ScanForm onScan={onScan} /></div></section>
+      <Pricing />
+      <section className="container final-cta"><div><h2>Give contractors the campaign to run today.</h2><p>JobLeak answers the question: what local jobs should I go after this week?</p></div><button className="primary" onClick={() => go('radar')}>Open Opportunity Radar <ChevronRight size={18} /></button></section>
+      <Footer go={go} />
+    </main>
+  );
 }
 
-const campaignEngines: Array<{ title: string; text: string; Icon: LucideIcon }> = [
-  { title: 'Google Search Campaigns', text: 'For urgent, ready-to-call searches like emergency AC repair, roof leak, or drain cleaning.', Icon: Search },
-  { title: 'Google Local Services Pack', text: 'For top placement, trust, reviews, service areas, and fast lead handling.', Icon: Star },
-  { title: 'Reactivation + Retargeting', text: 'For past customers, old estimates, site visitors, and opted-in customer lists.', Icon: Users }
-];
-
-function OpportunityPreview({ opportunity, openCampaign }: { opportunity: Opportunity; openCampaign: (opportunity: Opportunity) => void }) { return <div className="radar-preview"><div className="radar-screen-top"><span>Live JobLeak Radar</span><strong>{opportunity.market}</strong></div><OpportunityCard opportunity={opportunity} openCampaign={openCampaign} featured /><div className="mini-pack"><div><Gauge size={18} /><strong>{opportunity.score.total}/100</strong><span>Opportunity score</span></div><div><Zap size={18} /><strong>{opportunity.rawSignals}</strong><span>signals scanned</span></div><div><MessageSquare size={18} /><strong>Track</strong><span>calls + jobs</span></div></div></div>; }
+function OpportunityPreview({ opportunity, openCampaign }: { opportunity: Opportunity; openCampaign: (opportunity: Opportunity) => void }) {
+  return <div className="radar-preview"><div className="radar-screen-top"><span>Live JobLeak Radar</span><strong>{opportunity.market}</strong></div><OpportunityCard opportunity={opportunity} openCampaign={openCampaign} featured /><div className="mini-pack"><div><Gauge size={18} /><strong>{opportunity.score.total}/100</strong><span>Opportunity score</span></div><div><Zap size={18} /><strong>{opportunity.rawSignals}</strong><span>signals scanned</span></div><div><MessageSquare size={18} /><strong>Track</strong><span>calls + jobs</span></div></div></div>;
+}
 
 function OpportunityRadar({ go, scan, setScan, liveSignals, setLiveSignals, openCampaign }: { go: (r: Route) => void; scan: ScanInput; setScan: (input: ScanInput) => void; liveSignals: LiveSignalSet | null; setLiveSignals: (signals: LiveSignalSet | null) => void; openCampaign: (opportunity: Opportunity) => void }) {
   const [draft, setDraft] = useState<ScanInput>(scan);
@@ -226,57 +331,335 @@ function OpportunityRadar({ go, scan, setScan, liveSignals, setLiveSignals, open
   const topOpportunity = opportunities[0];
   const totalSignals = opportunities.reduce((sum, item) => sum + item.rawSignals, 0);
 
-  function update<K extends keyof ScanInput>(key: K, value: ScanInput[K]) { const next = { ...draft, [key]: value }; if (key === 'industry') next.service = playbooks[value as Industry].services[0]; setDraft(next); setScan(next); }
+  function update<K extends keyof ScanInput>(key: K, value: ScanInput[K]) {
+    const next = { ...draft, [key]: value };
+    if (key === 'industry') next.service = playbooks[value as Industry].services[0];
+    setDraft(next);
+    setScan(next);
+  }
 
-  return <main><TopBar go={go} /><section className="radar-page"><div className="container"><div className="portal-head"><div><div className="label">Today&apos;s Top 3</div><h1>What jobs should you chase this week?</h1><p>JobLeak pulls live weather for the selected market and combines it with search-intent scoring.</p></div><button className="secondary" onClick={() => go('campaign')}>Open Campaign Generator</button></div><div className="signal-summary"><SignalCard label="Best opportunity" value={`${topOpportunity.score.total}/100`} detail={topOpportunity.title} icon={Gauge} /><SignalCard label="Live weather" value={loadingSignals ? 'Loading' : liveSignals?.status === 'live' ? 'Live' : 'Estimate'} detail={liveSignals?.message || 'Loading market forecast and estimated search intent.'} icon={Zap} /><SignalCard label="Search intent" value={`${liveSignals?.search.score || topOpportunity.score.searchIntent * 4}/100`} detail={liveSignals?.search.source === 'estimated' ? 'Estimated now. Google Ads API layer comes next.' : 'Google Ads API data'} icon={Search} /></div>{liveSignals?.weather && <div className="weather-strip"><span>Forecast: {liveSignals.locationName}</span><strong>{liveSignals.weather.maxTempF}F high</strong><strong>{liveSignals.weather.minTempF}F low</strong><strong>{liveSignals.weather.maxWindGustMph} mph gust</strong><strong>{liveSignals.weather.maxPrecipProbability}% rain risk</strong></div>}<div className="radar-controls"><label>Industry<select value={draft.industry} onChange={(e) => update('industry', e.target.value as Industry)}>{Object.entries(industryLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>City / market<input value={draft.city} onChange={(e) => update('city', e.target.value)} placeholder="Phoenix, AZ" /></label><label>Service type<select value={draft.service} onChange={(e) => update('service', e.target.value)}>{playbooks[draft.industry].services.map((service) => <option key={service} value={service}>{service}</option>)}</select></label></div><div className="radar-grid">{opportunities.map((opportunity) => <OpportunityCard key={opportunity.id} opportunity={opportunity} openCampaign={openCampaign} />)}</div></div></section><Footer go={go} /></main>;
+  return (
+    <main>
+      <TopBar go={go} />
+      <section className="radar-page app-surface">
+        <div className="container">
+          <div className="portal-head premium-head">
+            <div>
+              <div className="label">Today's Top 3</div>
+              <h1>What local jobs should you chase this week?</h1>
+              <p>JobLeak checks public/local demand signals, ranks the opportunity, and turns the best move into a launchable campaign.</p>
+            </div>
+            <button className="secondary" onClick={() => go('campaign')}>Open Campaign Generator</button>
+          </div>
+
+          <div className="signal-summary">
+            <SignalCard label="Best opportunity" value={`${topOpportunity.score.total}/100`} detail={topOpportunity.title} icon={Gauge} />
+            <SignalCard label="Signals scanned" value={`${totalSignals}`} detail={`${industryLabels[draft.industry]} demand layers for ${draft.city || defaultScan.city}.`} icon={FileSearch} />
+            <SignalCard label="Weather status" value={loadingSignals ? 'Loading' : liveSignals?.status === 'live' ? 'Live' : 'Estimate'} detail={liveSignals?.message || 'Loading market forecast and estimated search intent.'} icon={Zap} />
+          </div>
+
+          <SignalSourcesPanel loading={loadingSignals} liveSignals={liveSignals} />
+
+          {liveSignals?.weather && (
+            <div className="weather-strip">
+              <span>Forecast: {liveSignals.locationName}</span>
+              <strong>{liveSignals.weather.maxTempF}F high</strong>
+              <strong>{liveSignals.weather.minTempF}F low</strong>
+              <strong>{liveSignals.weather.maxWindGustMph} mph gust</strong>
+              <strong>{liveSignals.weather.maxPrecipProbability}% rain risk</strong>
+            </div>
+          )}
+
+          <div className="radar-controls premium-controls">
+            <label>Industry<select value={draft.industry} onChange={(e) => update('industry', e.target.value as Industry)}>{Object.entries(industryLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+            <label>City / market<input value={draft.city} onChange={(e) => update('city', e.target.value)} placeholder="Phoenix, AZ" /></label>
+            <label>Service type<select value={draft.service} onChange={(e) => update('service', e.target.value)}>{playbooks[draft.industry].services.map((service) => <option key={service} value={service}>{service}</option>)}</select></label>
+          </div>
+
+          <div className="radar-grid">{opportunities.map((opportunity) => <OpportunityCard key={opportunity.id} opportunity={opportunity} openCampaign={openCampaign} />)}</div>
+        </div>
+      </section>
+      <Footer go={go} />
+    </main>
+  );
 }
 
-function SignalCard({ label, value, detail, icon: Icon }: { label: string; value: string; detail: string; icon: LucideIcon }) { return <div className="signal-card"><Icon size={22} /><span>{label}</span><strong>{value}</strong><p>{detail}</p></div>; }
-function ScoreLine({ label, value, max }: { label: string; value: number; max: number }) { const percent = Math.round((value / max) * 100); return <div className="score-line"><div><span>{label}</span><strong>{value}/{max}</strong></div><i><b style={{ width: `${percent}%` }} /></i></div>; }
+function SignalSourcesPanel({ loading, liveSignals }: { loading: boolean; liveSignals: LiveSignalSet | null }) {
+  const rows = buildSignalSourceRows(loading, liveSignals);
+  return (
+    <section className="source-panel">
+      <div className="source-panel-head">
+        <div>
+          <span className="label">Signal Sources</span>
+          <h2>Live, estimated, and configurable layers stay separate.</h2>
+        </div>
+        <p>JobLeak only claims a source is live when the browser can actually load it. Other layers are clearly marked as estimated or configurable.</p>
+      </div>
+      <div className="source-grid">
+        {rows.map((source) => (
+          <div className="source-row" key={source.name}>
+            <div className="source-icon"><FileSearch size={18} /></div>
+            <div><strong>{source.name}</strong><p>{source.detail}</p></div>
+            <span className={`source-status ${source.status.toLowerCase()}`}>{source.status}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SignalCard({ label, value, detail, icon: Icon }: { label: string; value: string; detail: string; icon: LucideIcon }) {
+  return <div className="signal-card"><Icon size={22} /><span>{label}</span><strong>{value}</strong><p>{detail}</p></div>;
+}
+
+function ScoreLine({ label, value, max }: { label: string; value: number; max: number }) {
+  const percent = Math.round((value / max) * 100);
+  return <div className="score-line"><div><span>{label}</span><strong>{value}/{max}</strong></div><i><b style={{ width: `${percent}%` }} /></i></div>;
+}
 
 function OpportunityCard({ opportunity, openCampaign, featured = false }: { opportunity: Opportunity; openCampaign: (opportunity: Opportunity) => void; featured?: boolean }) {
-  return <article className={`opportunity-card ${featured ? 'featured' : ''}`}><div className="opp-head"><div><span className="confidence">{opportunity.confidence} confidence</span><h3>{opportunity.title}</h3></div><div className="score-pill"><strong>{opportunity.score.total}</strong><span>/100</span></div></div><div className="opp-meta"><MapPin size={16} /> {opportunity.market} <span /> <Zap size={16} /> {opportunity.rawSignals} signals <span /> {opportunity.service}</div><div className="score-breakdown"><ScoreLine label="Urgency" value={opportunity.score.urgency} max={25} /><ScoreLine label="Search intent" value={opportunity.score.searchIntent} max={25} /><ScoreLine label="Competition gap" value={opportunity.score.competitionGap} max={20} /><ScoreLine label="Revenue" value={opportunity.score.revenuePotential} max={15} /><ScoreLine label="Readiness" value={opportunity.score.launchReadiness} max={10} /></div><span className={`launch-badge ${opportunity.launchType}`}>{launchTypeLabels[opportunity.launchType]}</span><div className="signal-box"><strong>Signal:</strong> {opportunity.signal}</div><p><strong>Why it matters:</strong> {opportunity.why}</p><div className="opp-details"><div><span>Suggested offer</span><strong>{opportunity.offer}</strong></div><div><span>Recommended action</span><strong>{opportunity.action}</strong></div></div><div className="readiness-notes">{[...opportunity.liveSignalDetails, ...opportunity.launchReadinessNotes].slice(0, 3).map((note) => <span key={note}><Check size={14} /> {note}</span>)}</div><button className="primary full" onClick={() => openCampaign(opportunity)}>Generate Campaign Pack <ArrowRight size={18} /></button></article>;
+  return (
+    <article className={`opportunity-card ${featured ? 'featured' : ''}`}>
+      <div className="opp-head">
+        <div><span className="confidence">{opportunity.confidence} confidence</span><h3>{opportunity.title}</h3></div>
+        <div className="score-pill"><strong>{opportunity.score.total}</strong><span>/100</span></div>
+      </div>
+      <div className="opp-meta"><MapPin size={16} /> {opportunity.market} <span /> <Zap size={16} /> {opportunity.rawSignals} signals <span /> {opportunity.service}</div>
+      <div className="score-breakdown">
+        <ScoreLine label="Urgency" value={opportunity.score.urgency} max={25} />
+        <ScoreLine label="Search intent" value={opportunity.score.searchIntent} max={25} />
+        <ScoreLine label="Competition gap" value={opportunity.score.competitionGap} max={20} />
+        <ScoreLine label="Revenue" value={opportunity.score.revenuePotential} max={15} />
+        <ScoreLine label="Readiness" value={opportunity.score.launchReadiness} max={10} />
+      </div>
+      <span className={`launch-badge ${opportunity.launchType}`}>{launchTypeLabels[opportunity.launchType]}</span>
+      <div className="signal-box"><strong>Signal:</strong> {opportunity.signal}</div>
+      <p><strong>Why it matters:</strong> {opportunity.why}</p>
+      <div className="opp-details"><div><span>Suggested offer</span><strong>{opportunity.offer}</strong></div><div><span>Recommended action</span><strong>{opportunity.action}</strong></div></div>
+      <div className="readiness-notes">{[...opportunity.liveSignalDetails, ...opportunity.launchReadinessNotes].slice(0, 3).map((note) => <span key={note}><Check size={14} /> {note}</span>)}</div>
+      <button className="primary full" onClick={() => openCampaign(opportunity)}>Generate Campaign Pack <ArrowRight size={18} /></button>
+    </article>
+  );
 }
 
 function CampaignPage({ go, opportunity }: { go: (r: Route) => void; opportunity: Opportunity }) {
-  const [tab, setTab] = useState<CampaignTab>(opportunity.launchType); const [copied, setCopied] = useState(''); const [stage, setStage] = useState<CampaignStage>('Draft'); const [calls, setCalls] = useState(0); const [jobs, setJobs] = useState(0); const [revenue, setRevenue] = useState(0); const pack = useMemo(() => generateCampaignPack(opportunity), [opportunity]);
-  async function copyText(label: string, text: string) { try { await navigator.clipboard.writeText(text); setCopied(label); setTimeout(() => setCopied(''), 1600); } catch { setCopied('Copy failed'); setTimeout(() => setCopied(''), 1600); } }
-  function exportPack() { const blob = new Blob([campaignToText(pack)], { type: 'text/plain;charset=utf-8' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${pack.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.txt`; a.click(); URL.revokeObjectURL(url); }
-  return <main><TopBar go={go} /><section className="campaign-page"><div className="container campaign-grid"><aside className="campaign-summary"><div className="label green">Instant Campaign Pack</div><h1>{pack.name}</h1><p>{pack.objective}</p><div className="summary-score"><strong>{opportunity.score.total}</strong><span>Opportunity Score</span></div><div className="summary-card"><span>Recommended launch</span><strong>{launchTypeLabels[opportunity.launchType]}</strong></div><div className="summary-card"><span>Budget starter</span><strong>{pack.budget}</strong></div><div className="summary-card"><span>Campaign stage</span><strong>{stage}</strong></div><button className="primary full" onClick={() => copyText('Full campaign copied', campaignToText(pack))}><Copy size={18} /> Copy Full Pack</button><button className="secondary full" onClick={exportPack}><FileText size={18} /> Export Launch File</button><a className="secondary full" href="https://ads.google.com" target="_blank" rel="noreferrer"><Search size={18} /> Open Google Ads</a><button className="secondary full" onClick={() => setTab('tracking')}><Gauge size={18} /> Track Results</button><small>{copied || 'Creates launch assets. Direct Google publishing needs secure OAuth/backend later.'}</small></aside><div className="campaign-workspace"><div className="tabs">{([['google-search', 'Google Search'], ['lsa', 'Local Services'], ['reactivation', 'Reactivation'], ['checklist', 'Checklist'], ['tracking', 'Tracking']] as Array<[CampaignTab, string]>).map(([key, label]) => <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>{label}</button>)}</div>{tab === 'google-search' && <GoogleSearchPack pack={pack} copyText={copyText} />}{tab === 'lsa' && <LsaPack pack={pack} copyText={copyText} />}{tab === 'reactivation' && <ReactivationPack pack={pack} copyText={copyText} />}{tab === 'checklist' && <ChecklistPack pack={pack} copyText={copyText} />}{tab === 'tracking' && <TrackingPack stage={stage} setStage={setStage} calls={calls} setCalls={setCalls} jobs={jobs} setJobs={setJobs} revenue={revenue} setRevenue={setRevenue} />}</div></div></section><Footer go={go} /></main>;
+  const [tab, setTab] = useState<CampaignTab>(opportunity.launchType);
+  const [copied, setCopied] = useState('');
+  const [stage, setStage] = useState<CampaignStage>('Draft');
+  const [calls, setCalls] = useState(0);
+  const [jobs, setJobs] = useState(0);
+  const [revenue, setRevenue] = useState(0);
+  const pack = useMemo(() => generateCampaignPack(opportunity), [opportunity]);
+
+  async function copyText(label: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(label);
+      setTimeout(() => setCopied(''), 1600);
+    } catch {
+      setCopied('Copy failed');
+      setTimeout(() => setCopied(''), 1600);
+    }
+  }
+
+  function exportPack() {
+    const blob = new Blob([campaignToText(pack)], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${pack.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <main>
+      <TopBar go={go} />
+      <section className="campaign-page app-surface">
+        <div className="container campaign-grid">
+          <aside className="campaign-summary sticky-summary">
+            <div className="label green">Instant Campaign Pack</div>
+            <h1>{pack.name}</h1>
+            <p>{pack.objective}</p>
+            <div className="summary-score"><strong>{opportunity.score.total}</strong><span>Opportunity Score</span></div>
+            <div className="summary-card"><span>Recommended launch</span><strong>{launchTypeLabels[opportunity.launchType]}</strong></div>
+            <div className="summary-card"><span>Budget starter</span><strong>{pack.budget}</strong></div>
+            <div className="summary-card"><span>Campaign stage</span><strong>{stage}</strong></div>
+            <button className="primary full" onClick={() => copyText('Full campaign copied', campaignToText(pack))}><Copy size={18} /> Copy Full Pack</button>
+            <button className="secondary full" onClick={exportPack}><FileText size={18} /> Export Launch File</button>
+            <a className="secondary full" href="https://ads.google.com" target="_blank" rel="noreferrer"><Search size={18} /> Open Google Ads</a>
+            <button className="secondary full" onClick={() => setTab('tracking')}><Gauge size={18} /> Track Results</button>
+            <small>{copied || 'Creates launch assets. Direct Google publishing needs secure OAuth/backend later.'}</small>
+          </aside>
+
+          <div className="campaign-workspace">
+            <div className="campaign-headline">
+              <span className="label">Generated campaign</span>
+              <h2>Copy, launch, and track the campaign assets.</h2>
+              <p>Everything below is written for real service-area campaigns and owned audiences. No private homeowner data or non-opted-in SMS.</p>
+            </div>
+            <div className="tabs">{([['google-search', 'Google Search'], ['lsa', 'Local Services'], ['reactivation', 'Reactivation'], ['checklist', 'Checklist'], ['tracking', 'Tracking']] as Array<[CampaignTab, string]>).map(([key, label]) => <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>{label}</button>)}</div>
+            {tab === 'google-search' && <GoogleSearchPack pack={pack} copyText={copyText} />}
+            {tab === 'lsa' && <LsaPack pack={pack} copyText={copyText} />}
+            {tab === 'reactivation' && <ReactivationPack pack={pack} copyText={copyText} />}
+            {tab === 'checklist' && <ChecklistPack pack={pack} copyText={copyText} />}
+            {tab === 'tracking' && <TrackingPack stage={stage} setStage={setStage} calls={calls} setCalls={setCalls} jobs={jobs} setJobs={setJobs} revenue={revenue} setRevenue={setRevenue} />}
+          </div>
+        </div>
+      </section>
+      <Footer go={go} />
+    </main>
+  );
 }
 
-function PackHeader({ icon: Icon, title, subtitle, onCopy }: { icon: LucideIcon; title: string; subtitle: string; onCopy: () => void }) { return <div className="pack-header"><div><Icon size={24} /><div><h2>{title}</h2><p>{subtitle}</p></div></div><button className="secondary" onClick={onCopy}><Copy size={16} /> Copy</button></div>; }
-function CopyBlock({ title, lines }: { title: string; lines: string[] }) { return <div className="copy-block"><strong>{title}</strong><div>{lines.map((line) => <p key={line}>{line}</p>)}</div></div>; }
-function GoogleSearchPack({ pack, copyText }: { pack: CampaignPack; copyText: (label: string, text: string) => void }) { const text = ['Keywords', ...pack.google.keywords, 'Negatives', ...pack.google.negatives, 'Headlines', ...pack.google.headlines, 'Descriptions', ...pack.google.descriptions].join('\n'); return <div className="pack-panel"><PackHeader icon={Search} title="Google Search Campaign" subtitle="Use this for urgent ready-to-call demand." onCopy={() => copyText('Google Search copied', text)} /><div className="pack-grid two"><CopyBlock title="Campaign setup" lines={[`Name: ${pack.name}`, `Daily budget: ${pack.budget}`, `Location: ${pack.opportunity.market}`, `Objective: Calls and booked jobs`, `Landing CTA: ${pack.cta}`]} /><CopyBlock title="Landing page" lines={[pack.landingHeadline, pack.landingSubheadline, `Offer: ${pack.offer}`, `CTA: ${pack.cta}`]} /><CopyBlock title="Keywords" lines={pack.google.keywords} /><CopyBlock title="Negative keywords" lines={pack.google.negatives} /><CopyBlock title="Ad headlines" lines={pack.google.headlines} /><CopyBlock title="Ad descriptions" lines={pack.google.descriptions} /></div><CopyBlock title="Recommended assets" lines={pack.google.assets} /></div>; }
-function LsaPack({ pack, copyText }: { pack: CampaignPack; copyText: (label: string, text: string) => void }) { const text = ['Google Local Services Pack', ...pack.lsa.categories, ...pack.lsa.profileTasks, ...pack.lsa.leadRules].join('\n'); return <div className="pack-panel"><PackHeader icon={Star} title="Google Local Services Pack" subtitle="Use this for trust, top placement, and high-intent local calls." onCopy={() => copyText('Local Services copied', text)} /><div className="pack-grid two"><CopyBlock title="Service categories to check" lines={pack.lsa.categories} /><CopyBlock title="Service areas" lines={pack.lsa.serviceAreas} /><CopyBlock title="Profile tasks" lines={pack.lsa.profileTasks} /><CopyBlock title="Lead handling rules" lines={pack.lsa.leadRules} /></div></div>; }
-function ReactivationPack({ pack, copyText }: { pack: CampaignPack; copyText: (label: string, text: string) => void }) { const text = [pack.reactivation.emailSubject, pack.reactivation.emailBody, pack.reactivation.sms, pack.reactivation.facebookPost].join('\n\n'); return <div className="pack-panel"><PackHeader icon={MessageSquare} title="Reactivation + Retargeting" subtitle="Use only for owned audiences, opted-in customers, and retargeting pools." onCopy={() => copyText('Reactivation copied', text)} /><CopyBlock title="Audience" lines={[pack.reactivation.audience]} /><div className="pack-grid two"><CopyBlock title="Email" lines={[`Subject: ${pack.reactivation.emailSubject}`, pack.reactivation.emailBody]} /><CopyBlock title="SMS for opted-in list" lines={[pack.reactivation.sms]} /><CopyBlock title="Facebook / Instagram post" lines={[pack.reactivation.facebookPost]} /><CopyBlock title="Call script" lines={pack.callScript} /></div></div>; }
-function ChecklistPack({ pack, copyText }: { pack: CampaignPack; copyText: (label: string, text: string) => void }) { return <div className="pack-panel"><PackHeader icon={ListChecks} title="Launch Checklist" subtitle="Use this to launch safely and track booked jobs." onCopy={() => copyText('Checklist copied', pack.checklist.join('\n'))} /><div className="checklist-list">{pack.checklist.map((item) => <div key={item}><Check size={18} /> {item}</div>)}</div><div className="safe-note"><ShieldCheck size={18} /> JobLeak does not scrape private homeowners, provide private phone numbers, or send SMS to non-opted-in people.</div></div>; }
-function TrackingPack({ stage, setStage, calls, setCalls, jobs, setJobs, revenue, setRevenue }: { stage: CampaignStage; setStage: (stage: CampaignStage) => void; calls: number; setCalls: (value: number) => void; jobs: number; setJobs: (value: number) => void; revenue: number; setRevenue: (value: number) => void; }) { return <div className="pack-panel tracking-panel"><PackHeader icon={Gauge} title="Campaign Proof Tracker" subtitle="Did the campaign create calls, booked jobs, and revenue?" onCopy={() => undefined} /><div className="tracker-grid"><div className="tracker-card"><span>Stage</span><strong>{stage}</strong></div><div className="tracker-card"><span>Calls</span><strong>{calls}</strong></div><div className="tracker-card"><span>Booked jobs</span><strong>{jobs}</strong></div><div className="tracker-card"><span>Est. revenue</span><strong>${revenue.toLocaleString()}</strong></div></div><div className="result-buttons"><button className="primary" onClick={() => setStage('Launched')}>Mark as launched</button><button className="secondary" onClick={() => { setCalls(calls + 1); setStage('Calls Added'); }}>+ Add call</button><button className="secondary" onClick={() => { setJobs(jobs + 1); setStage('Booked Jobs Added'); }}>+ Add booked job</button></div><label>Estimated revenue from this campaign<input type="number" min="0" value={revenue} onChange={(e) => setRevenue(Number(e.target.value))} /></label><div className="safe-note"><TrendingUp size={18} /> Next backend step: save this tracker to Supabase so JobLeak learns which opportunities actually produce booked jobs.</div></div>; }
+function PackHeader({ icon: Icon, title, subtitle, onCopy }: { icon: LucideIcon; title: string; subtitle: string; onCopy: () => void }) {
+  return <div className="pack-header"><div><Icon size={24} /><div><h2>{title}</h2><p>{subtitle}</p></div></div><button className="secondary" onClick={onCopy}><Copy size={16} /> Copy</button></div>;
+}
+
+function CopyBlock({ title, lines }: { title: string; lines: string[] }) {
+  return <div className="copy-block"><strong>{title}</strong><div>{lines.map((line) => <p key={line}>{line}</p>)}</div></div>;
+}
+
+function GoogleSearchPack({ pack, copyText }: { pack: CampaignPack; copyText: (label: string, text: string) => void }) {
+  const text = ['Keywords', ...pack.google.keywords, 'Negatives', ...pack.google.negatives, 'Headlines', ...pack.google.headlines, 'Descriptions', ...pack.google.descriptions].join('\n');
+  return <div className="pack-panel"><PackHeader icon={Search} title="Google Search Campaign" subtitle="Use this for urgent ready-to-call demand." onCopy={() => copyText('Google Search copied', text)} /><div className="pack-grid two"><CopyBlock title="Campaign setup" lines={[`Name: ${pack.name}`, `Daily budget: ${pack.budget}`, `Location: ${pack.opportunity.market}`, 'Objective: Calls and booked jobs', `Landing CTA: ${pack.cta}`]} /><CopyBlock title="Landing page" lines={[pack.landingHeadline, pack.landingSubheadline, `Offer: ${pack.offer}`, `CTA: ${pack.cta}`]} /><CopyBlock title="Keywords" lines={pack.google.keywords} /><CopyBlock title="Negative keywords" lines={pack.google.negatives} /><CopyBlock title="Ad headlines" lines={pack.google.headlines} /><CopyBlock title="Ad descriptions" lines={pack.google.descriptions} /></div><CopyBlock title="Recommended assets" lines={pack.google.assets} /></div>;
+}
+
+function LsaPack({ pack, copyText }: { pack: CampaignPack; copyText: (label: string, text: string) => void }) {
+  const text = ['Google Local Services Pack', ...pack.lsa.categories, ...pack.lsa.profileTasks, ...pack.lsa.leadRules].join('\n');
+  return <div className="pack-panel"><PackHeader icon={Star} title="Google Local Services Pack" subtitle="Use this for trust, top placement, and high-intent local calls." onCopy={() => copyText('Local Services copied', text)} /><div className="pack-grid two"><CopyBlock title="Service categories to check" lines={pack.lsa.categories} /><CopyBlock title="Service areas" lines={pack.lsa.serviceAreas} /><CopyBlock title="Profile tasks" lines={pack.lsa.profileTasks} /><CopyBlock title="Lead handling rules" lines={pack.lsa.leadRules} /></div></div>;
+}
+
+function ReactivationPack({ pack, copyText }: { pack: CampaignPack; copyText: (label: string, text: string) => void }) {
+  const text = [pack.reactivation.emailSubject, pack.reactivation.emailBody, pack.reactivation.sms, pack.reactivation.facebookPost].join('\n\n');
+  return <div className="pack-panel"><PackHeader icon={MessageSquare} title="Reactivation + Retargeting" subtitle="Use only for owned audiences, opted-in customers, and retargeting pools." onCopy={() => copyText('Reactivation copied', text)} /><CopyBlock title="Audience" lines={[pack.reactivation.audience]} /><div className="pack-grid two"><CopyBlock title="Email" lines={[`Subject: ${pack.reactivation.emailSubject}`, pack.reactivation.emailBody]} /><CopyBlock title="SMS for opted-in list" lines={[pack.reactivation.sms]} /><CopyBlock title="Facebook / Instagram post" lines={[pack.reactivation.facebookPost]} /><CopyBlock title="Call script" lines={pack.callScript} /></div></div>;
+}
+
+function ChecklistPack({ pack, copyText }: { pack: CampaignPack; copyText: (label: string, text: string) => void }) {
+  return <div className="pack-panel"><PackHeader icon={ListChecks} title="Launch Checklist" subtitle="Use this to launch safely and track booked jobs." onCopy={() => copyText('Checklist copied', pack.checklist.join('\n'))} /><div className="checklist-list">{pack.checklist.map((item) => <div key={item}><Check size={18} /> {item}</div>)}</div><div className="safe-note"><ShieldCheck size={18} /> JobLeak does not scrape private homeowners, provide private phone numbers, or send SMS to non-opted-in people.</div></div>;
+}
+
+function TrackingPack({ stage, setStage, calls, setCalls, jobs, setJobs, revenue, setRevenue }: { stage: CampaignStage; setStage: (stage: CampaignStage) => void; calls: number; setCalls: (value: number) => void; jobs: number; setJobs: (value: number) => void; revenue: number; setRevenue: (value: number) => void }) {
+  return <div className="pack-panel tracking-panel"><PackHeader icon={Gauge} title="Campaign Proof Tracker" subtitle="Did the campaign create calls, booked jobs, and revenue?" onCopy={() => undefined} /><div className="tracker-grid"><div className="tracker-card"><span>Stage</span><strong>{stage}</strong></div><div className="tracker-card"><span>Calls</span><strong>{calls}</strong></div><div className="tracker-card"><span>Booked jobs</span><strong>{jobs}</strong></div><div className="tracker-card"><span>Est. revenue</span><strong>${revenue.toLocaleString()}</strong></div></div><div className="result-buttons"><button className="primary" onClick={() => setStage('Launched')}>Mark as launched</button><button className="secondary" onClick={() => { setCalls(calls + 1); setStage('Calls Added'); }}>+ Add call</button><button className="secondary" onClick={() => { setJobs(jobs + 1); setStage('Booked Jobs Added'); }}>+ Add booked job</button></div><label>Estimated revenue from this campaign<input type="number" min="0" value={revenue} onChange={(e) => setRevenue(Number(e.target.value))} /></label><div className="safe-note"><TrendingUp size={18} /> Next backend step: save this tracker to Supabase so JobLeak learns which opportunities actually produce booked jobs.</div></div>;
+}
 
 function ScanForm({ onScan }: { onScan: (input: ScanInput) => void }) {
-  const [form, setForm] = useState<ScanInput>({ ...defaultScan, businessName: '', city: '', website: '', email: '', phone: '', goal: '' }); const [status, setStatus] = useState('');
-  function update<K extends keyof ScanInput>(key: K, value: ScanInput[K]) { const next = { ...form, [key]: value }; if (key === 'industry') next.service = playbooks[value as Industry].services[0]; setForm(next); }
-  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const normalized: ScanInput = { ...defaultScan, ...form, businessName: form.businessName || defaultScan.businessName, city: form.city || defaultScan.city, service: form.service || playbooks[form.industry].services[0] }; setStatus('Saving scan request...'); try { await saveLead({ businessName: normalized.businessName, industry: industryLabels[normalized.industry], city: normalized.city, website: normalized.website, email: normalized.email, phone: normalized.phone, goal: `Live opportunity scan request. Service: ${normalized.service}. Goal: ${normalized.goal}` }); setStatus('Saved. Opening live radar...'); } catch { setStatus('Opening radar. Lead storage needs Render Supabase env vars or table access.'); } setTimeout(() => onScan(normalized), 300); }
+  const [form, setForm] = useState<ScanInput>({ ...defaultScan, businessName: '', city: '', website: '', email: '', phone: '', goal: '' });
+  const [status, setStatus] = useState('');
+
+  function update<K extends keyof ScanInput>(key: K, value: ScanInput[K]) {
+    const next = { ...form, [key]: value };
+    if (key === 'industry') next.service = playbooks[value as Industry].services[0];
+    setForm(next);
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const normalized: ScanInput = { ...defaultScan, ...form, businessName: form.businessName || defaultScan.businessName, city: form.city || defaultScan.city, service: form.service || playbooks[form.industry].services[0] };
+    setStatus('Saving scan request...');
+    try {
+      await saveLead({ businessName: normalized.businessName, industry: industryLabels[normalized.industry], city: normalized.city, website: normalized.website, email: normalized.email, phone: normalized.phone, goal: `Live opportunity scan request. Service: ${normalized.service}. Goal: ${normalized.goal}` });
+      setStatus('Saved. Opening live radar...');
+    } catch {
+      setStatus('Opening radar. Lead storage needs Render Supabase env vars or table access.');
+    }
+    setTimeout(() => onScan(normalized), 300);
+  }
+
   return <form className="scan-card" onSubmit={submit}><div className="form-grid"><label>Business name<input value={form.businessName} onChange={(e) => update('businessName', e.target.value)} placeholder="Phoenix Comfort Pros" /></label><label>Industry<select value={form.industry} onChange={(e) => update('industry', e.target.value as Industry)}>{Object.entries(industryLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label><label>City / market<input value={form.city} onChange={(e) => update('city', e.target.value)} placeholder="Phoenix, AZ" /></label><label>Service type<select value={form.service} onChange={(e) => update('service', e.target.value)}>{playbooks[form.industry].services.map((service) => <option key={service} value={service}>{service}</option>)}</select></label><label>Website<input value={form.website} onChange={(e) => update('website', e.target.value)} placeholder="https://example.com" /></label><label>Phone<input value={form.phone} onChange={(e) => update('phone', e.target.value)} placeholder="(555) 123-4567" /></label></div><label>Email<input value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="owner@example.com" /></label><label>Goal<textarea value={form.goal} onChange={(e) => update('goal', e.target.value)} placeholder="More emergency repair calls this week..." /></label><button className="primary full" type="submit">Generate Live Opportunity Scan <TrendingUp size={18} /></button><small>{status || 'Saves to public.jobleak_leads when Supabase env variables are configured.'}</small></form>;
 }
 
-function Pricing() { return <section id="pricing" className="section white"><div className="container centered"><div className="label">Pricing</div><h2>Simple pricing around campaigns, not dashboards.</h2><div className="pricing-grid">{pricing.map(([name, price, desc, items], i) => <div key={name as string} className={`price-card ${i === 1 ? 'popular' : ''}`}>{i === 1 && <span className="popular-badge">Best first offer</span>}<h3>{name as string}</h3><p>{desc as string}</p><div className="price">{price as string}<span>/mo</span></div><ul>{(items as string[]).map((x) => <li key={x}><Check size={15} /> {x}</li>)}</ul><a href="#scan" className={i === 1 ? 'primary full' : 'secondary full'}>Start Opportunity Scan</a></div>)}</div></div></section>; }
-function Dashboard({ go, scan, liveSignals, openCampaign }: { go: (r: Route) => void; scan: ScanInput; liveSignals: LiveSignalSet | null; openCampaign: (opportunity: Opportunity) => void }) { const opportunities = buildOpportunities(scan, liveSignals); return <main><TopBar go={go} /><section className="dashboard-page"><div className="container"><div className="portal-head"><div><div className="label">Client command center</div><h1>{scan.businessName}</h1><p>{industryLabels[scan.industry]} opportunity dashboard - {scan.city}</p></div><button className="primary" onClick={() => go('radar')}>New Opportunity Scan</button></div><div className="report-metrics"><Stat label="Top score" value={`${opportunities[0].score.total}/100`} /><Stat label="Signals scanned" value={`${opportunities.reduce((sum, item) => sum + item.rawSignals, 0)}`} /><Stat label="Campaign packs" value="Ready" /><Stat label="Weather" value={liveSignals?.status === 'live' ? 'Live' : 'Estimate'} /></div><div className="portal-grid"><div className="panel big"><h2>Top opportunities</h2>{opportunities.map((opportunity) => <div className="lead-row" key={opportunity.id}><div><strong>{opportunity.title} - {opportunity.score.total}/100</strong><span>{opportunity.signal}</span></div><button onClick={() => openCampaign(opportunity)}>Campaign</button></div>)}</div><div className="panel big"><h2>Proof loop</h2>{['Launch the recommended campaign', 'Add calls and booked jobs', 'Estimate revenue from campaign', 'Use the result to improve the next scan'].map((a) => <div className="action-row" key={a}><Check size={17} /> {a}</div>)}</div></div></div></section></main>; }
-function Login({ go }: { go: (r: Route) => void }) { return <main><TopBar go={go} /><section className="login-section"><div className="container login-grid"><div className="dark-card"><div className="label green">Client portal</div><h1>Your local job opportunity command center.</h1><p>Clients use this portal to see what jobs to chase, generate campaigns, and track follow-up.</p><div className="check-list light">{['Opportunity Radar', 'Instant Campaign Packs', 'Lead Inbox', 'Launch checklist'].map((x) => <div key={x}><Check size={18} /> {x}</div>)}</div></div><div className="login-card"><LockKeyhole size={34} /><h2>Client Login</h2><p>Portal placeholder for launch. Connect authentication after the landing flow is converting.</p><label>Email<input placeholder="owner@company.com" /></label><label>Password<input type="password" placeholder="Password" /></label><button className="primary full" onClick={() => go('dashboard')}>Open Client Portal <Sparkles size={18} /></button></div></div></section></main>; }
-function TopBar({ go }: { go: (r: Route) => void }) { return <header className="simple-top"><div className="container nav-inner"><Logo /><div className="top-actions"><button className="secondary" onClick={() => go('radar')}>Radar</button><button className="secondary" onClick={() => go('home')}>Home</button></div></div></header>; }
-function Footer({ go }: { go: (r: Route) => void }) { return <footer><div className="container footer-grid"><Logo /><div><button onClick={() => go('radar')}>Opportunity Radar</button><button onClick={() => go('campaign')}>Campaign Generator</button><button onClick={() => { window.location.hash = '#admin'; }}>Admin Inbox</button><button onClick={() => go('login')}>Login</button></div><span>© 2026 JobLeak. AI local job opportunity radar for contractors.</span></div></footer>; }
-function IndustryCard({ industry }: { industry: Industry }) { const data = playbooks[industry]; return <div className="industry-card"><div className={`industry-art ${data.gradient}`}><span>{data.icon}</span><strong>{industryLabels[industry]}</strong></div><ul>{data.services.slice(0, 4).map((service) => <li key={service}><Check size={15} /> {service}</li>)}</ul></div>; }
-function Stat({ label, value }: { label: string; value: string }) { return <div className="stat-card"><span>{label}</span><strong>{value}</strong></div>; }
+function Pricing() {
+  return <section id="pricing" className="section white"><div className="container centered"><div className="label">Pricing</div><h2>Simple pricing around campaigns, not dashboards.</h2><div className="pricing-grid">{pricing.map(([name, price, desc, items], i) => <div key={name} className={`price-card ${i === 1 ? 'popular' : ''}`}>{i === 1 && <span className="popular-badge">Best first offer</span>}<h3>{name}</h3><p>{desc}</p><div className="price">{price}<span>/mo</span></div><ul>{items.map((x) => <li key={x}><Check size={15} /> {x}</li>)}</ul><a href="#scan" className={i === 1 ? 'primary full' : 'secondary full'}>Start Opportunity Scan</a></div>)}</div></div></section>;
+}
+
+function Dashboard({ go, scan, liveSignals, openCampaign }: { go: (r: Route) => void; scan: ScanInput; liveSignals: LiveSignalSet | null; openCampaign: (opportunity: Opportunity) => void }) {
+  const opportunities = buildOpportunities(scan, liveSignals);
+  return <main><TopBar go={go} /><section className="dashboard-page"><div className="container"><div className="portal-head"><div><div className="label">Client command center</div><h1>{scan.businessName}</h1><p>{industryLabels[scan.industry]} opportunity dashboard - {scan.city}</p></div><button className="primary" onClick={() => go('radar')}>New Opportunity Scan</button></div><div className="report-metrics"><Stat label="Top score" value={`${opportunities[0].score.total}/100`} /><Stat label="Signals scanned" value={`${opportunities.reduce((sum, item) => sum + item.rawSignals, 0)}`} /><Stat label="Campaign packs" value="Ready" /><Stat label="Weather" value={liveSignals?.status === 'live' ? 'Live' : 'Estimate'} /></div><div className="portal-grid"><div className="panel big"><h2>Top opportunities</h2>{opportunities.map((opportunity) => <div className="lead-row" key={opportunity.id}><div><strong>{opportunity.title} - {opportunity.score.total}/100</strong><span>{opportunity.signal}</span></div><button onClick={() => openCampaign(opportunity)}>Campaign</button></div>)}</div><div className="panel big"><h2>Proof loop</h2>{['Launch the recommended campaign', 'Add calls and booked jobs', 'Estimate revenue from campaign', 'Use the result to improve the next scan'].map((a) => <div className="action-row" key={a}><Check size={17} /> {a}</div>)}</div></div></div></section></main>;
+}
+
+function Login({ go }: { go: (r: Route) => void }) {
+  return <main><TopBar go={go} /><section className="login-section"><div className="container login-grid"><div className="dark-card"><div className="label green">Client portal</div><h1>Your local job opportunity command center.</h1><p>Clients use this portal to see what jobs to chase, generate campaigns, and track follow-up.</p><div className="check-list light">{['Opportunity Radar', 'Instant Campaign Packs', 'Lead Inbox', 'Launch checklist'].map((x) => <div key={x}><Check size={18} /> {x}</div>)}</div></div><div className="login-card"><LockKeyhole size={34} /><h2>Client Login</h2><p>Portal placeholder for launch. Connect authentication after the landing flow is converting.</p><label>Email<input placeholder="owner@company.com" /></label><label>Password<input type="password" placeholder="Password" /></label><button className="primary full" onClick={() => go('dashboard')}>Open Client Portal <Sparkles size={18} /></button></div></div></section></main>;
+}
+
+function TopBar({ go }: { go: (r: Route) => void }) {
+  return <header className="simple-top"><div className="container nav-inner"><Logo /><div className="top-actions"><button className="secondary" onClick={() => go('radar')}>Radar</button><button className="secondary" onClick={() => go('home')}>Home</button></div></div></header>;
+}
+
+function Footer({ go }: { go: (r: Route) => void }) {
+  return <footer><div className="container footer-grid"><Logo /><div><button onClick={() => go('radar')}>Opportunity Radar</button><button onClick={() => go('campaign')}>Campaign Generator</button><button onClick={() => { window.location.hash = '#admin'; }}>Admin Inbox</button><button onClick={() => go('login')}>Login</button></div><span>© 2026 JobLeak. AI local job opportunity radar for contractors.</span></div></footer>;
+}
+
+function IndustryCard({ industry }: { industry: Industry }) {
+  const data = playbooks[industry];
+  return <div className="industry-card"><div className={`industry-art ${data.gradient}`}><span>{data.icon}</span><strong>{industryLabels[industry]}</strong></div><ul>{data.services.slice(0, 4).map((service) => <li key={service}><Check size={15} /> {service}</li>)}</ul></div>;
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return <div className="stat-card"><span>{label}</span><strong>{value}</strong></div>;
+}
+
+function buildSignalSourceRows(loading: boolean, signals: LiveSignalSet | null): SignalSourceView[] {
+  const lookup = new Map((signals?.publicSignals.signals || []).map((source) => [source.source, source]));
+  const weather = lookup.get('weather');
+  const permits = lookup.get('permits');
+  const businessOpenings = lookup.get('business_openings');
+  const publicBids = lookup.get('public_bids');
+
+  return [
+    {
+      name: 'Weather Forecast',
+      status: loading ? 'Loading' : signals?.weather ? 'Live' : 'Estimated',
+      detail: signals?.weather ? `${signals.weather.maxTempF}F high, ${signals.weather.maxWindGustMph} mph max gust, ${signals.weather.maxPrecipProbability}% rain risk.` : weather?.detail || 'Loads from public forecast data when the market resolves.'
+    },
+    {
+      name: 'NWS Alerts',
+      status: loading ? 'Loading' : signals?.weather ? 'Live' : 'Estimated',
+      detail: signals?.weather?.nwsAlerts.length ? signals.weather.nwsAlerts.join(', ') : 'Checked with forecast layer. No active severe alert is also useful signal context.'
+    },
+    {
+      name: 'Search Intent',
+      status: 'Estimated',
+      detail: signals?.search ? `${signals.search.score}/100 estimated local commercial intent. Keyword Planner can replace this through a backend integration later.` : 'Estimated until a secure Google Ads backend layer is connected.'
+    },
+    {
+      name: 'Permits',
+      status: toSourceStatus(permits?.status),
+      detail: permits?.detail || 'Configurable city/county open-data endpoint for permit-style demand hooks.'
+    },
+    {
+      name: 'Business Openings',
+      status: toSourceStatus(businessOpenings?.status),
+      detail: businessOpenings?.detail || 'Configurable local listings layer for new-location and commercial activity hooks.'
+    },
+    {
+      name: 'Public Bids',
+      status: toSourceStatus(publicBids?.status),
+      detail: publicBids?.detail || 'Configurable public contract and bid opportunity source.'
+    }
+  ];
+}
+
+function toSourceStatus(status?: string): SourceStatus {
+  if (status === 'live') return 'Live';
+  if (status === 'api_ready') return 'Configured';
+  return 'Configurable';
+}
 
 function buildOpportunities(input: ScanInput, signals: LiveSignalSet | null): Opportunity[] {
-  const pb = playbooks[input.industry]; const market = input.city || defaultScan.city; const service = input.service || pb.services[0];
+  const pb = playbooks[input.industry];
+  const market = input.city || defaultScan.city;
+  const service = input.service || pb.services[0];
   const weatherTriggerText = signals?.weather?.triggers.length ? `Live weather: ${signals.weather.triggers.join(', ')}` : '';
   const base = [
     { id: `${input.industry}-google-search`, title: pb.emergencyTitle, signal: weatherTriggerText || pb.emergencySignal, why: pb.emergencyWhy, offer: pb.emergencyOffer, action: pb.emergencyAction, confidence: 'High' as Confidence, launchType: 'google-search' as LaunchType, audience: 'Homeowners actively searching for urgent service' },
     { id: `${input.industry}-lsa`, title: pb.lsaTitle, signal: pb.lsaSignal, why: pb.lsaWhy, offer: pb.lsaOffer, action: pb.lsaAction, confidence: 'High' as Confidence, launchType: 'lsa' as LaunchType, audience: 'High-intent local searchers comparing trusted providers' },
     { id: `${input.industry}-reactivation`, title: pb.reactivationTitle, signal: pb.reactivationSignal, why: pb.reactivationWhy, offer: pb.reactivationOffer, action: pb.reactivationAction, confidence: 'Medium' as Confidence, launchType: 'reactivation' as LaunchType, audience: 'Past customers, old estimates, opted-in list, and website visitors' }
   ];
-  return base.map((opportunity) => { const score = scoreOpportunity(opportunity.launchType, input.industry, signals); return { ...opportunity, industry: input.industry, market, service, score, rawSignals: getSignalCount(opportunity.launchType, input.industry, signals), launchReadinessNotes: getReadinessNotes(opportunity.launchType), liveSignalDetails: getLiveSignalDetails(opportunity.launchType, signals) }; }).sort((a, b) => b.score.total - a.score.total);
+  return base.map((opportunity) => {
+    const score = scoreOpportunity(opportunity.launchType, input.industry, signals);
+    return { ...opportunity, industry: input.industry, market, service, score, rawSignals: getSignalCount(opportunity.launchType, input.industry, signals), launchReadinessNotes: getReadinessNotes(opportunity.launchType), liveSignalDetails: getLiveSignalDetails(opportunity.launchType, signals) };
+  }).sort((a, b) => b.score.total - a.score.total);
 }
 
 function scoreOpportunity(launchType: LaunchType, industry: Industry, signals: LiveSignalSet | null): OpportunityScore {
@@ -289,18 +672,86 @@ function scoreOpportunity(launchType: LaunchType, industry: Industry, signals: L
     reactivation: { urgency: 14, searchIntent: 16, competitionGap: 14, revenuePotential: 12, launchReadiness: 9, difficultyPenalty: 2 }
   };
   const industryBoost: Record<Industry, number> = { hvac: 3, plumbing: 2, roofing: 2, electrical: 1, pest: 1, garage: 2 };
-  const raw = base[launchType]; const total = Math.max(1, Math.min(100, raw.urgency + raw.searchIntent + raw.competitionGap + raw.revenuePotential + raw.launchReadiness + industryBoost[industry] - raw.difficultyPenalty)); return { ...raw, total };
+  const raw = base[launchType];
+  const total = Math.max(1, Math.min(100, raw.urgency + raw.searchIntent + raw.competitionGap + raw.revenuePotential + raw.launchReadiness + industryBoost[industry] - raw.difficultyPenalty));
+  return { ...raw, total };
 }
-function getSignalCount(launchType: LaunchType, industry: Industry, signals: LiveSignalSet | null) { const base: Record<LaunchType, number> = { 'google-search': 34, lsa: 21, reactivation: 13 }; const boost: Record<Industry, number> = { hvac: 14, plumbing: 10, roofing: 12, electrical: 8, pest: 7, garage: 9 }; const live = signals?.status === 'live' ? 8 + (signals.weather?.triggers.length || 0) * 4 : 0; return base[launchType] + boost[industry] + live; }
-function getReadinessNotes(launchType: LaunchType) { if (launchType === 'google-search') return ['Needs call tracking', 'Needs focused landing page', 'Answer calls live']; if (launchType === 'lsa') return ['Needs reviews and service categories', 'Needs quick lead response', 'Budget after lead quality']; return ['Owned/opted-in list only', 'Best for past customers', 'Track booked jobs']; }
-function getLiveSignalDetails(launchType: LaunchType, signals: LiveSignalSet | null) { const details: string[] = []; if (signals?.status === 'live') details.push('Live weather loaded'); if (launchType === 'google-search' && signals?.weather?.triggers.length) details.push(signals.weather.triggers[0]); if (signals?.search.source === 'estimated') details.push('Search estimate'); return details; }
+
+function getSignalCount(launchType: LaunchType, industry: Industry, signals: LiveSignalSet | null) {
+  const base: Record<LaunchType, number> = { 'google-search': 34, lsa: 21, reactivation: 13 };
+  const boost: Record<Industry, number> = { hvac: 14, plumbing: 10, roofing: 12, electrical: 8, pest: 7, garage: 9 };
+  const live = signals?.status === 'live' ? 8 + (signals.weather?.triggers.length || 0) * 4 : 0;
+  return base[launchType] + boost[industry] + live;
+}
+
+function getReadinessNotes(launchType: LaunchType) {
+  if (launchType === 'google-search') return ['Needs call tracking', 'Needs focused landing page', 'Answer calls live'];
+  if (launchType === 'lsa') return ['Needs reviews and service categories', 'Needs quick lead response', 'Budget after lead quality'];
+  return ['Owned/opted-in list only', 'Best for past customers', 'Track booked jobs'];
+}
+
+function getLiveSignalDetails(launchType: LaunchType, signals: LiveSignalSet | null) {
+  const details: string[] = [];
+  if (signals?.status === 'live') details.push('Live weather loaded');
+  if (launchType === 'google-search' && signals?.weather?.triggers.length) details.push(signals.weather.triggers[0]);
+  if (signals?.search.source === 'estimated') details.push('Search estimate');
+  return details;
+}
 
 function generateCampaignPack(opportunity: Opportunity) {
-  const city = cleanCity(opportunity.market); const service = opportunity.service; const industry = industryLabels[opportunity.industry]; const serviceLower = service.toLowerCase(); const cityLower = city.toLowerCase(); const name = `${city} ${service} - ${shortLaunchLabel(opportunity.launchType)}`;
-  return { opportunity, name, objective: `Turn the ${opportunity.signal.toLowerCase()} signal into booked ${service.toLowerCase()} calls in ${opportunity.market}.`, budget: opportunity.launchType === 'google-search' ? '$50-$150/day starter budget' : opportunity.launchType === 'lsa' ? 'Set weekly lead budget based on capacity' : '$0 ad spend to start, then retargeting budget if available', landingHeadline: `${service} in ${city}`, landingSubheadline: `${opportunity.why} Book fast local service from a trusted ${industry.toLowerCase()} team.`, offer: opportunity.offer, cta: opportunity.launchType === 'reactivation' ? 'Reply to schedule service' : 'Call now to schedule service', google: { keywords: [`${serviceLower} ${cityLower}`, `${serviceLower} near me`, `same day ${serviceLower}`, `emergency ${serviceLower}`, `${industry.toLowerCase()} company ${cityLower}`, `${serviceLower} open now`, `best ${serviceLower} ${cityLower}`, `local ${serviceLower}`], negatives: ['jobs', 'salary', 'school', 'training', 'diy', 'free parts', 'used', 'wholesale', 'certification', 'course'], headlines: [`${service} ${city}`, `Same-Day ${service}`, `Call Local Pros Today`, `Fast ${industry} Help`, `${city} Home Service`, `Book Service Today`, `Trusted Local Team`, `Emergency Help Available`], descriptions: [`${opportunity.signal}. Book fast ${service.toLowerCase()} with a local ${industry.toLowerCase()} team today.`, `${opportunity.offer}. Call now to check availability in ${opportunity.market}.`, `Need help this week? Get a clear offer, fast scheduling, and local service.`], assets: ['Use phone call conversion tracking before spending heavily.', 'Send traffic to a focused service landing page, not the homepage.', 'Run only inside the real service area.', 'Use call assets and make sure calls are answered live.', 'Pause keywords that spend without booked calls.'] }, lsa: { categories: [service, industry, `Emergency ${industry}`, 'Repair service', 'Inspection service'], serviceAreas: [opportunity.market, `Top suburbs around ${city}`, 'Only areas the team can service quickly'], profileTasks: ['Confirm business name, license, insurance, phone, and hours.', 'Add recent job photos and team photos.', 'Turn on the service categories that match this opportunity.', 'Request reviews from happy customers every week.', 'Keep profile hours aligned with real call-answering hours.'], leadRules: ['Answer new leads live when possible.', 'Call missed leads back within 5 minutes.', 'Use the JobLeak call script to qualify urgency and location.', 'Mark junk leads quickly and track booked jobs separately.', 'Increase budget only after lead quality is confirmed.'] }, reactivation: { audience: opportunity.audience, emailSubject: `${city} ${service} alert: ${opportunity.offer}`, emailBody: `Hi,\n\nThis week we are seeing a strong reason to focus on ${service.toLowerCase()} in ${opportunity.market}: ${opportunity.signal.toLowerCase()}.\n\nIf you need help, we are offering: ${opportunity.offer}.\n\nCall us or reply to this email to request a service time.`, sms: `${service} alert: ${opportunity.offer} in ${city}. If you need help, reply SERVICE to request a time. Opted-in customers only.`, facebookPost: `${city} homeowners: ${opportunity.signal}. If you are dealing with ${service.toLowerCase()} issues, our team is offering ${opportunity.offer.toLowerCase()}. Message us today to request service.` }, callScript: [`Thanks for calling. Are you calling about ${service.toLowerCase()} today?`, `We are seeing more demand around ${opportunity.signal.toLowerCase()} this week, so I can check our next available time for you.`, 'What city or neighborhood are you in?', 'Is this urgent today, or are you trying to schedule for later this week?', 'What is the best phone number and address for the service visit?'], checklist: [`Confirm the service area for ${opportunity.market}.`, `Use the offer: ${opportunity.offer}.`, 'Create or update the landing page headline and call button.', 'Add Google Search keywords and negative keywords.', 'Turn on call tracking before launching.', 'Set a starter budget cap and review daily.', 'Train the office team with the call script.', 'Send SMS only to opted-in customers.', 'Track calls, booked jobs, and revenue from the campaign.', 'Mark the result in JobLeak so the next campaign improves.'] };
+  const city = cleanCity(opportunity.market);
+  const service = opportunity.service;
+  const industry = industryLabels[opportunity.industry];
+  const serviceLower = service.toLowerCase();
+  const cityLower = city.toLowerCase();
+  const name = `${city} ${service} - ${shortLaunchLabel(opportunity.launchType)}`;
+
+  return {
+    opportunity,
+    name,
+    objective: `Turn the ${opportunity.signal.toLowerCase()} signal into booked ${service.toLowerCase()} calls in ${opportunity.market}.`,
+    budget: opportunity.launchType === 'google-search' ? '$50-$150/day starter budget' : opportunity.launchType === 'lsa' ? 'Set weekly lead budget based on capacity' : '$0 ad spend to start, then retargeting budget if available',
+    landingHeadline: `${service} in ${city}`,
+    landingSubheadline: `${opportunity.why} Book fast local service from a trusted ${industry.toLowerCase()} team.`,
+    offer: opportunity.offer,
+    cta: opportunity.launchType === 'reactivation' ? 'Reply to schedule service' : 'Call now to schedule service',
+    google: {
+      keywords: [`${serviceLower} ${cityLower}`, `${serviceLower} near me`, `same day ${serviceLower}`, `emergency ${serviceLower}`, `${industry.toLowerCase()} company ${cityLower}`, `${serviceLower} open now`, `best ${serviceLower} ${cityLower}`, `local ${serviceLower}`],
+      negatives: ['jobs', 'salary', 'school', 'training', 'diy', 'free parts', 'used', 'wholesale', 'certification', 'course'],
+      headlines: [`${service} ${city}`, `Same-Day ${service}`, 'Call Local Pros Today', `Fast ${industry} Help`, `${city} Home Service`, 'Book Service Today', 'Trusted Local Team', 'Emergency Help Available'],
+      descriptions: [`${opportunity.signal}. Book fast ${service.toLowerCase()} with a local ${industry.toLowerCase()} team today.`, `${opportunity.offer}. Call now to check availability in ${opportunity.market}.`, 'Need help this week? Get a clear offer, fast scheduling, and local service.'],
+      assets: ['Use phone call conversion tracking before spending heavily.', 'Send traffic to a focused service landing page, not the homepage.', 'Run only inside the real service area.', 'Use call assets and make sure calls are answered live.', 'Pause keywords that spend without booked calls.']
+    },
+    lsa: {
+      categories: [service, industry, `Emergency ${industry}`, 'Repair service', 'Inspection service'],
+      serviceAreas: [opportunity.market, `Top suburbs around ${city}`, 'Only areas the team can service quickly'],
+      profileTasks: ['Confirm business name, license, insurance, phone, and hours.', 'Add recent job photos and team photos.', 'Turn on the service categories that match this opportunity.', 'Request reviews from happy customers every week.', 'Keep profile hours aligned with real call-answering hours.'],
+      leadRules: ['Answer new leads live when possible.', 'Call missed leads back within 5 minutes.', 'Use the JobLeak call script to qualify urgency and location.', 'Mark junk leads quickly and track booked jobs separately.', 'Increase budget only after lead quality is confirmed.']
+    },
+    reactivation: {
+      audience: opportunity.audience,
+      emailSubject: `${city} ${service} alert: ${opportunity.offer}`,
+      emailBody: `Hi,\n\nThis week we are seeing a strong reason to focus on ${service.toLowerCase()} in ${opportunity.market}: ${opportunity.signal.toLowerCase()}.\n\nIf you need help, we are offering: ${opportunity.offer}.\n\nCall us or reply to this email to request a service time.`,
+      sms: `${service} alert: ${opportunity.offer} in ${city}. If you need help, reply SERVICE to request a time. Opted-in customers only.`,
+      facebookPost: `${city} homeowners: ${opportunity.signal}. If you are dealing with ${service.toLowerCase()} issues, our team is offering ${opportunity.offer.toLowerCase()}. Message us today to request service.`
+    },
+    callScript: [`Thanks for calling. Are you calling about ${service.toLowerCase()} today?`, `We are seeing more demand around ${opportunity.signal.toLowerCase()} this week, so I can check our next available time for you.`, 'What city or neighborhood are you in?', 'Is this urgent today, or are you trying to schedule for later this week?', 'What is the best phone number and address for the service visit?'],
+    checklist: [`Confirm the service area for ${opportunity.market}.`, `Use the offer: ${opportunity.offer}.`, 'Create or update the landing page headline and call button.', 'Add Google Search keywords and negative keywords.', 'Turn on call tracking before launching.', 'Set a starter budget cap and review daily.', 'Train the office team with the call script.', 'Send SMS only to opted-in customers.', 'Track calls, booked jobs, and revenue from the campaign.', 'Mark the result in JobLeak so the next campaign improves.']
+  };
 }
-function campaignToText(pack: CampaignPack) { return [`JOBLEAK CAMPAIGN PACK`, `Campaign: ${pack.name}`, `Market: ${pack.opportunity.market}`, `Service: ${pack.opportunity.service}`, `Opportunity Score: ${pack.opportunity.score.total}/100`, `Recommended launch: ${launchTypeLabels[pack.opportunity.launchType]}`, `Signal: ${pack.opportunity.signal}`, `Why it matters: ${pack.opportunity.why}`, `Offer: ${pack.offer}`, `Budget: ${pack.budget}`, '', `Landing headline: ${pack.landingHeadline}`, `Landing subheadline: ${pack.landingSubheadline}`, `CTA: ${pack.cta}`, '', 'GOOGLE SEARCH KEYWORDS', ...pack.google.keywords.map((x) => `- ${x}`), '', 'NEGATIVE KEYWORDS', ...pack.google.negatives.map((x) => `- ${x}`), '', 'AD HEADLINES', ...pack.google.headlines.map((x) => `- ${x}`), '', 'AD DESCRIPTIONS', ...pack.google.descriptions.map((x) => `- ${x}`), '', 'EMAIL', `Subject: ${pack.reactivation.emailSubject}`, pack.reactivation.emailBody, '', 'SMS', pack.reactivation.sms, '', 'CALL SCRIPT', ...pack.callScript.map((x) => `- ${x}`), '', 'CHECKLIST', ...pack.checklist.map((x) => `- ${x}`)].join('\n'); }
-function cleanCity(market: string) { return market.split(',')[0].trim() || market; }
-function shortLaunchLabel(type: LaunchType) { if (type === 'google-search') return 'Google Search Campaign'; if (type === 'lsa') return 'Local Services Pack'; return 'Reactivation Campaign'; }
+
+function campaignToText(pack: CampaignPack) {
+  return ['JOBLEAK CAMPAIGN PACK', `Campaign: ${pack.name}`, `Market: ${pack.opportunity.market}`, `Service: ${pack.opportunity.service}`, `Opportunity Score: ${pack.opportunity.score.total}/100`, `Recommended launch: ${launchTypeLabels[pack.opportunity.launchType]}`, `Signal: ${pack.opportunity.signal}`, `Why it matters: ${pack.opportunity.why}`, `Offer: ${pack.offer}`, `Budget: ${pack.budget}`, '', `Landing headline: ${pack.landingHeadline}`, `Landing subheadline: ${pack.landingSubheadline}`, `CTA: ${pack.cta}`, '', 'GOOGLE SEARCH KEYWORDS', ...pack.google.keywords.map((x) => `- ${x}`), '', 'NEGATIVE KEYWORDS', ...pack.google.negatives.map((x) => `- ${x}`), '', 'AD HEADLINES', ...pack.google.headlines.map((x) => `- ${x}`), '', 'AD DESCRIPTIONS', ...pack.google.descriptions.map((x) => `- ${x}`), '', 'EMAIL', `Subject: ${pack.reactivation.emailSubject}`, pack.reactivation.emailBody, '', 'SMS', pack.reactivation.sms, '', 'CALL SCRIPT', ...pack.callScript.map((x) => `- ${x}`), '', 'CHECKLIST', ...pack.checklist.map((x) => `- ${x}`)].join('\n');
+}
+
+function cleanCity(market: string) {
+  return market.split(',')[0].trim() || market;
+}
+
+function shortLaunchLabel(type: LaunchType) {
+  if (type === 'google-search') return 'Google Search Campaign';
+  if (type === 'lsa') return 'Local Services Pack';
+  return 'Reactivation Campaign';
+}
 
 export default App;
