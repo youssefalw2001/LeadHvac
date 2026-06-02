@@ -1,0 +1,112 @@
+.opportunity-card .score-pill {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(47, 109, 246, 0.24);
+}
+
+.opportunity-card .score-pill::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border-radius: inherit;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  pointer-events: none;
+}
+
+.opportunity-card .score-pill strong {
+  animation: radarScorePop 0.45s ease both;
+}
+
+@keyframes radarScorePop {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.score-breakdown .score-line i {
+  overflow: hidden;
+}
+
+.score-breakdown .score-line b {
+  animation: radarBarFill 0.75s ease both;
+}
+
+@keyframes radarBarFill {
+  from { width: 0; }
+}
+
+.safe-radar-loader {
+  margin: 0 0 18px;
+  border: 1px solid #dfe6f0;
+  border-radius: 24px;
+  padding: 18px;
+  background: linear-gradient(135deg, rgba(8,17,31,0.98), rgba(13,23,40,0.94));
+  box-shadow: 0 20px 54px rgba(8,17,31,0.16);
+  color: white;
+  overflow: hidden;
+  position: relative;
+}
+
+.safe-radar-loader::before {
+  content: '';
+  position: absolute;
+  inset: -40% 0 auto;
+  height: 120px;
+  background: linear-gradient(180deg, transparent, rgba(47,109,246,0.22), transparent);
+  animation: radarScanLine 1.5s ease-in-out infinite;
+}
+
+@keyframes radarScanLine {
+  from { transform: translateY(-90px); }
+  to { transform: translateY(260px); }
+}
+
+.safe-radar-loader-inner {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  align-items: center;
+}
+
+.safe-radar-loader-mark {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.07);
+  color: #ff7a1a;
+  font-weight: 950;
+}
+
+.safe-radar-loader span {
+  display: block;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.15em;
+  color: rgba(255,255,255,0.5);
+  text-transform: uppercase;
+}
+
+.safe-radar-loader strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
+  font-weight: 950;
+  letter-spacing: -0.035em;
+}
+
+.safe-radar-loader p {
+  margin: 4px 0 0;
+  color: rgba(255,255,255,0.62);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (max-width: 700px) {
+  .safe-radar-loader-inner {
+    grid-template-columns: 1fr;
+  }
+}
