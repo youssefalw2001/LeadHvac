@@ -85,10 +85,25 @@ type IntegrationResult = {
   detail: string;
 };
 
-const env = (import.meta as unknown as { env?: Record<string, string> }).env || {};
-const samApiKey = env.VITE_SAM_API_KEY;
-const googlePlacesApiKey = env.VITE_GOOGLE_PLACES_API_KEY;
-const permitApiUrl = env.VITE_PERMIT_API_URL;
+/**
+ * SECURITY NOTE
+ * -------------
+ * Anything read from `import.meta.env.VITE_*` is inlined into the production
+ * JavaScript bundle and is publicly readable by anyone who opens devtools.
+ *
+ * This file previously read VITE_SAM_API_KEY, VITE_GOOGLE_PLACES_API_KEY and
+ * VITE_PERMIT_API_URL in the browser, and put the SAM key directly into a URL
+ * query string. That leaks billable credentials.
+ *
+ * Those reads have been removed. Permits, federal bids and business-openings
+ * data must be fetched by a Supabase Edge Function that holds the secrets
+ * server-side and returns only the aggregate counts to the client.
+ *
+ * VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are safe to expose — the anon
+ * key is designed to be public and is constrained by Row Level Security.
+ */
+const SERVER_PROXY_DETAIL =
+  'Requires a server-side proxy. This call was removed from the browser because it needs a secret API key, and browser-side keys are publicly readable.';
 
 const marketProfiles: Record<string, { growth: number; permitHeat: number; businessActivity: number; publicBids: number }> = {
   phoenix: { growth: 22, permitHeat: 24, businessActivity: 18, publicBids: 11 },
@@ -230,109 +245,27 @@ async function fetchOptionalIntegrations(input: SignalRequest, location?: GeoRes
 }
 
 async function fetchPermitSignal(input: SignalRequest): Promise<IntegrationResult> {
-  if (!permitApiUrl) {
-    return {
-      count: 0,
-      status: 'needs_endpoint',
-      detail: 'No permit endpoint configured yet. Add VITE_PERMIT_API_URL for one city/county feed at a time.'
-    };
-  }
-  try {
-    const url = permitApiUrl
-      .replaceAll('{city}', encodeURIComponent(cleanCity(input.city)))
-      .replaceAll('{industry}', encodeURIComponent(input.industry))
-      .replaceAll('{service}', encodeURIComponent(input.service || defaultService(input.industry)));
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Permit feed failed');
-    const data = await response.json();
-    const count = extractCount(data);
-    return {
-      count,
-      status: 'live',
-      detail: `${count} permit-style public records returned from configured city/county feed.`
-    };
-  } catch {
-    return {
-      count: 0,
-      status: 'api_ready',
-      detail: 'Permit endpoint is configured but did not return usable data. Check CORS, schema, or endpoint URL.'
-    };
-  }
+  return {
+    count: 0,
+    status: 'needs_endpoint',
+    detail: `Permit records for ${cleanCity(input.city)} are not wired up. ${SERVER_PROXY_DETAIL}`
+  };
 }
 
 async function fetchSamBidSignal(input: SignalRequest): Promise<IntegrationResult> {
-  if (!samApiKey) {
-    return {
-      count: 0,
-      status: 'needs_key',
-      detail: 'SAM.gov public opportunities API needs VITE_SAM_API_KEY or, preferably, a Supabase Edge Function proxy.'
-    };
-  }
-  try {
-    const { from, to } = lastNDaysForSam(30);
-    const title = samTitleKeyword(input.industry);
-    const url = `https://api.sam.gov/opportunities/v2/search?limit=20&api_key=${encodeURIComponent(samApiKey)}&postedFrom=${from}&postedTo=${to}&title=${encodeURIComponent(title)}`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('SAM request failed');
-    const data = await response.json() as { totalRecords?: number; opportunitiesData?: unknown[] };
-    const count = data.totalRecords ?? data.opportunitiesData?.length ?? 0;
-    return {
-      count,
-      status: 'live',
-      detail: `${count} active/recent federal public opportunity records matched ${title}.`
-    };
-  } catch {
-    return {
-      count: 0,
-      status: 'api_ready',
-      detail: 'SAM.gov key is present but browser request failed. Move this call to a Supabase Edge Function if CORS blocks it.'
-    };
-  }
+  return {
+    count: 0,
+    status: 'needs_key',
+    detail: `Federal bid search for "${samTitleKeyword(input.industry)}" is not wired up. ${SERVER_PROXY_DETAIL}`
+  };
 }
 
-async function fetchPlacesBusinessOpenings(input: SignalRequest, location?: GeoResult): Promise<IntegrationResult> {
-  if (!googlePlacesApiKey) {
-    return {
-      count: 0,
-      status: 'needs_key',
-      detail: 'Google Places Text Search needs VITE_GOOGLE_PLACES_API_KEY or a secure backend proxy.'
-    };
-  }
-  try {
-    const city = cleanCity(input.city);
-    const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': googlePlacesApiKey,
-        'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.businessStatus,places.openingDate,places.types,places.websiteUri'
-      },
-      body: JSON.stringify({
-        textQuery: `new businesses opening in ${city}`,
-        includeFutureOpeningBusinesses: true,
-        locationBias: location ? {
-          circle: {
-            center: { latitude: location.latitude, longitude: location.longitude },
-            radius: 30000
-          }
-        } : undefined
-      })
-    });
-    if (!response.ok) throw new Error('Places request failed');
-    const data = await response.json() as { places?: unknown[] };
-    const count = data.places?.length || 0;
-    return {
-      count,
-      status: 'live',
-      detail: `${count} business opening/listing records returned by Google Places Text Search.`
-    };
-  } catch {
-    return {
-      count: 0,
-      status: 'api_ready',
-      detail: 'Google Places key is present but request failed. Restrict key correctly or move to Supabase Edge Function.'
-    };
-  }
+async function fetchPlacesBusinessOpenings(input: SignalRequest, _location?: GeoResult): Promise<IntegrationResult> {
+  return {
+    count: 0,
+    status: 'needs_key',
+    detail: `Business openings for ${cleanCity(input.city)} are not wired up. ${SERVER_PROXY_DETAIL}`
+  };
 }
 
 function buildWeatherTriggers(weather: Omit<WeatherSignalSummary, 'triggers' | 'nwsAlerts' | 'severeAlertCount'>, industry: SignalIndustry) {

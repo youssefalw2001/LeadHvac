@@ -1,13 +1,10 @@
 import { useEffect, useState } from 'react';
 import App from './App';
 import { PremiumHome } from './PremiumHome';
+import { StormRadar } from './StormRadar';
 
 function getHashRoute() {
   return window.location.hash.replace('#', '');
-}
-
-function isPremiumHomeRoute(route: string) {
-  return route === '' || route === 'home';
 }
 
 export function PublicAppRouter() {
@@ -19,6 +16,9 @@ export function PublicAppRouter() {
     return () => window.removeEventListener('hashchange', sync);
   }, []);
 
-  if (isPremiumHomeRoute(route)) return <PremiumHome />;
+  // Storm Intelligence is the product. It is the default route.
+  if (route === '' || route === 'storm') return <StormRadar />;
+  // Previous marketing home, kept for reference at #home
+  if (route === 'home') return <PremiumHome />;
   return <App />;
 }
