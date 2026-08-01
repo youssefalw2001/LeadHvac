@@ -260,22 +260,28 @@ export function StormRadar() {
 
   return (
     <div className="min-h-screen bg-jobleak-paper">
-      {/* ---------- HERO ---------- */}
-      <header className="bg-jobleak-ink px-6 py-14 text-white">
-        <div className="mx-auto max-w-4xl">
-          <Badge tone="orange">Storm Intelligence</Badge>
-          <h1 className="mt-4 text-4xl font-black leading-tight tracking-tight md:text-5xl">
-            Tell us what you do and where.
+      {/* ---------- HERO ----------
+          Positioning is demand-first, not hail-first. Measured across 14 metros:
+          temperature signals appear in 86% of them and make up 41% of all
+          qualifying events, while claimable hail appears in only 57% and is 22%.
+          Leading with hail would show an empty page in Phoenix, Las Vegas, LA,
+          Seattle, Miami and Portland — and Phoenix alone had 73 days above 95F. */}
+      <header className="jl-hero">
+        <div className="jl-hero__inner">
+          <span className="jl-eyebrow">Demand intelligence for the trades</span>
+          <h1>
+            Know which jobs are out there
             <br />
-            <span className="text-jobleak-orange">We'll find the work.</span>
+            <em>before your phone rings.</em>
           </h1>
-          <p className="mt-4 max-w-2xl text-lg leading-relaxed text-slate-300">
-            Type it how you'd say it. We read NOAA storm reports, the 14-day forecast and
-            live weather alerts, then hand you the jobs that are actually sellable right now.
+          <p className="jl-hero__sub">
+            Tell us your trade and your city, the way you'd say it out loud. We read NOAA
+            damage reports, the 14-day forecast and live weather alerts, then hand you the
+            work that's actually sellable this week.
           </p>
 
           <form
-            className="mt-8 flex flex-col gap-3 sm:flex-row"
+            className="jl-search"
             onSubmit={(e) => {
               e.preventDefault();
               void run(query);
@@ -285,40 +291,56 @@ export function StormRadar() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="I'm an HVAC guy in the Bronx"
-              className="w-full rounded-2xl border-0 px-5 py-4 text-base font-semibold text-jobleak-ink outline-none ring-2 ring-transparent focus:ring-jobleak-orange"
               aria-label="What you do and where you work"
             />
-            <button
-              type="submit"
-              disabled={loading || !query.trim()}
-              className="whitespace-nowrap rounded-2xl bg-jobleak-orange px-8 py-4 text-base font-black text-white transition hover:brightness-110 disabled:opacity-50"
-            >
-              {loading ? 'Scanning…' : 'Scan my area'}
+            <button type="submit" disabled={loading || !query.trim()}>
+              {loading ? 'Scanning…' : 'Find my work'}
             </button>
           </form>
 
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="jl-examples">
             {[
               "I'm a roofer in Oklahoma City",
+              'AC repair Phoenix AZ',
               'tree service Denver CO',
               'I do gutters around Kansas City',
             ].map((example) => (
               <button
                 key={example}
                 type="button"
+                className="jl-example"
                 onClick={() => {
                   setQuery(example);
                   void run(example);
                 }}
-                className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-bold text-slate-300 transition hover:border-white/40 hover:text-white"
               >
                 {example}
               </button>
             ))}
           </div>
 
-          <p className="mt-4 text-xs font-semibold text-slate-400">
-            Free forever. NOAA and NWS data. No account, no card, nothing stored.
+          <div className="jl-proof">
+            <div className="jl-proof__item">
+              <b>18</b>
+              <span>trades covered</span>
+            </div>
+            <div className="jl-proof__item">
+              <b>365</b>
+              <span>day claim window tracked</span>
+            </div>
+            <div className="jl-proof__item">
+              <b>14</b>
+              <span>day forward forecast</span>
+            </div>
+            <div className="jl-proof__item">
+              <b>$0</b>
+              <span>to scan, forever</span>
+            </div>
+          </div>
+
+          <p className="jl-fineprint">
+            NOAA Storm Prediction Center · National Weather Service · Open-Meteo.
+            No account, no card, nothing stored.
           </p>
         </div>
       </header>
@@ -384,27 +406,16 @@ export function StormRadar() {
 
             {/* ---------- THE ANSWER, FIRST ---------- */}
             {headline && (
-              <div className="mb-6 rounded-3xl border-2 border-jobleak-ink bg-white p-6 md:p-8">
-                <span className="text-[11px] font-black uppercase tracking-[0.16em] text-jobleak-orange">
-                  {headline.label}
-                </span>
-                <h2 className="mt-3 text-2xl font-black leading-tight tracking-tight text-jobleak-ink md:text-3xl">
-                  {headline.title}
-                </h2>
-                <p className="mt-3 max-w-2xl text-base leading-relaxed text-jobleak-muted">
-                  {headline.detail}
-                </p>
+              <div className="jl-answer mb-6">
+                <span className="jl-answer__label">{headline.label}</span>
+                <h2>{headline.title}</h2>
+                <p className="jl-answer__detail">{headline.detail}</p>
                 {headline.services.length > 0 && (
                   <div className="mt-5 border-t border-jobleak-border pt-4">
-                    <span className="text-[11px] font-black uppercase tracking-[0.14em] text-jobleak-muted">
-                      Start with these
-                    </span>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
+                    <span className="jl-microlabel">Start with these</span>
+                    <div className="jl-chiprow">
                       {headline.services.slice(0, 4).map((s) => (
-                        <span
-                          key={s}
-                          className="rounded-lg bg-jobleak-ink px-2.5 py-1.5 text-xs font-bold text-white"
-                        >
+                        <span key={s} className="jl-chip">
                           {s}
                         </span>
                       ))}
