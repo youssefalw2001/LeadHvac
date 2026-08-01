@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { AlertSignup } from './AlertSignup';
 import { Badge } from './components/ui/Badge';
 import { Card, CardContent, CardHeader } from './components/ui/Card';
 import { cn } from './lib/utils';
@@ -45,6 +46,7 @@ function EventRow({ event }: { event: StormEvent }) {
         {typeof event.claimWindowDaysLeft === 'number' && (
           <Badge tone="green">{event.claimWindowDaysLeft}d claim window left</Badge>
         )}
+        {event.firstOfSeason && <Badge tone="orange">First of season</Badge>}
       </div>
 
       <h4 className="mt-2 text-base font-black text-jobleak-ink">{event.headline}</h4>
@@ -61,6 +63,24 @@ function EventRow({ event }: { event: StormEvent }) {
         </span>
         <p className="mt-1 text-sm leading-relaxed text-jobleak-ink">{event.action}</p>
       </div>
+
+      {event.services.length > 0 && (
+        <div className="mt-3">
+          <span className="text-[11px] font-black uppercase tracking-[0.14em] text-jobleak-muted">
+            Jobs to sell
+          </span>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {event.services.map((s) => (
+              <span
+                key={s}
+                className="rounded-lg border border-jobleak-border bg-white px-2 py-1 text-[11px] font-bold text-jobleak-ink"
+              >
+                {s}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -351,6 +371,12 @@ export function StormRadar() {
               subtitle="Heat, freeze and rainfall events from the last few months. These do not create insurance claims — they show you when your phone was busy and who you never got back to."
               events={pastDemand}
               empty="No significant temperature or rainfall events in the lookback window."
+            />
+
+            {/* ---------- ALERTS: the paid product ---------- */}
+            <AlertSignup
+              area={report.area}
+              defaultTrade={trade === 'all' ? tradesPresent[0] : trade}
             />
 
             {/* ---------- WORK WINDOWS (the inverse signal) ---------- */}

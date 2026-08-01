@@ -4,7 +4,13 @@ html,
 body,
 #root {
   max-width: 100%;
+  /* `overflow-x: hidden` creates a scroll container on the ancestor, which
+     silently breaks `position: sticky` on descendants (the top nav).
+     `overflow-x: clip` clips identically WITHOUT creating a scroll container,
+     so sticky keeps working. The `hidden` line stays first as a fallback for
+     browsers without `clip` support. */
   overflow-x: hidden;
+  overflow-x: clip;
 }
 
 img,
