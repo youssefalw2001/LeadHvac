@@ -28,14 +28,72 @@ The pitch changed from an unprovable claim to a verifiable one:
 
 ## Data sources
 
-All free, keyless, CORS-friendly, no backend required:
+All free, keyless, and **verified CORS-enabled** (`ACAO: *` with an Origin header), so
+the browser calls them directly with no backend.
 
-| Source | Used for |
+| Source | Used for | Type |
+|---|---|---|
+| **`spc.noaa.gov/climo/reports`** | **Observed hail size, wind damage, tornadoes with lat/lon** | **ground truth** |
+| `geocoding-api.open-meteo.com` | Service area → coordinates | — |
+| `api.open-meteo.com/v1/forecast` | 14-day outlook, work windows | modelled |
+| `archive-api.open-meteo.com/v1/archive` | 120-day lookback | modelled |
+| `api.weather.gov/alerts/active` | Live NWS warnings | official |
+
+### Why SPC is the most important source
+
+Open-Meteo tells you what a **model** thinks happened at a grid point. NOAA's Storm
+Prediction Center tells you what a human or instrument **observed** at a coordinate:
+
+```
+Time,Size,Location,County,State,Lat,Lon,Comments
+2225,100,2 SSW Custer,Custer,SD,43.74,-103.62,(UNR)
+     ↑ Size in hundredths of an inch: 100 = 1.00"
+```
+
+`"1.75 inch hail reported 4 miles from this address on June 26"` is **evidence**.
+`"the model says gusts were elevated"` is a guess. Only one of them sells a roof.
+
+Measured volume: ~640 hail observations and ~6,500 wind damage reports nationwide per
+month, each with coordinates, filterable to any service radius. A 60-day, 3-kind scan
+of one market completes in about 1.5 seconds.
+
+Hail ≥ **1.00"** is the practical insurance-claim threshold for asphalt shingles.
+
+### Verified NOT available
+
+- **Pollen** — Open-Meteo's pollen data is CAMS Europe only, returns null for US points
+- **Per-address hail** — SPC reports are point observations; absence of a report is not
+  proof there was no hail
+
+## Trades covered
+
+16 trades, each mapped to the specific measured signal that drives its demand:
+
+| Trade | Driven by |
 |---|---|
-| `geocoding-api.open-meteo.com` | Service area → coordinates |
-| `api.open-meteo.com/v1/forecast` | 14-day forward outlook |
-| `archive-api.open-meteo.com/v1/archive` | 120-day historical lookback |
-| `api.weather.gov/alerts/active` | Live NWS warnings |
+| Roofing | observed hail ≥1", severe wind |
+| Tree service | observed wind damage reports |
+| Gutters | wind, heavy rain, snowfall |
+| Solar | observed hail ≥1" (panel damage) |
+| Windows & glass | observed hail ≥1" |
+| Fencing | severe wind |
+| HVAC | heat ≥95/100°F, freeze ≤32°F |
+| Plumbing | hard freeze ≤20°F |
+| Restoration | heavy rain, tornado reports |
+| Painting | **dry work windows** (inverse signal) |
+| Concrete & masonry | work windows, freeze-thaw |
+| Landscaping & irrigation | evapotranspiration, frost |
+| Pest control | humidity + temperature |
+| Snow & ice | snowfall |
+| Air quality & duct | PM2.5, dust, smoke |
+| Foundation | soil moisture swings |
+
+### The inverse signal nobody sells
+
+Painters, concrete crews and install crews don't need to know when it stormed — they
+need to know **when they can work**. `findWorkWindows()` returns runs of consecutive
+days that are dry, 50–92°F, and under 25 mph gusts. Same free data, completely
+different emotional need, and no competitor offers it.
 
 ## Thresholds
 
