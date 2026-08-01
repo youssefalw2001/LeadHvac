@@ -5,17 +5,14 @@ import { cn } from './lib/utils';
 import {
   buildStormIntelReport,
   THRESHOLDS,
-  type StormEvent,
+  TRADE_LABELS,
   type StormIntelReport,
+  type StormEvent,
   type Trade,
 } from './stormIntel';
 
-const TRADE_LABEL: Record<Trade, string> = {
-  roofing: 'Roofing',
-  hvac: 'HVAC',
-  plumbing: 'Plumbing',
-  restoration: 'Restoration',
-};
+// Labels live in the engine so the trade list has one source of truth.
+const TRADE_LABEL = TRADE_LABELS;
 
 const SEVERITY_TONE = {
   critical: 'orange',
@@ -249,7 +246,9 @@ export function StormRadar() {
                         {usd(totals.low)}–{usd(totals.high)}
                       </p>
                       <p className="text-[11px] font-semibold text-jobleak-muted">
-                        assumptions shown below
+                        {trade === 'all'
+                          ? 'combined across all trades — filter to your trade'
+                          : `${TRADE_LABEL[trade]} only`}
                       </p>
                     </div>
                   )}
@@ -342,6 +341,40 @@ export function StormRadar() {
               events={pastDemand}
               empty="No significant temperature or rainfall events in the lookback window."
             />
+
+            {/* ---------- WORK WINDOWS (the inverse signal) ---------- */}
+            {report.workWindows.length > 0 && (
+              <Card className="mb-6 border-green-300 bg-green-50">
+                <CardHeader>
+                  <h3 className="text-lg font-black tracking-tight text-jobleak-ink">
+                    Bookable work windows
+                  </h3>
+                  <p className="mt-1 text-sm text-jobleak-muted">
+                    Stretches of dry, mild, low-wind days in the forecast. For trades that
+                    need to <em>work</em>, not chase — exterior paint, concrete, installs.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  {report.workWindows.slice(0, 4).map((w) => (
+                    <div
+                      key={`${w.startDate}-${w.endDate}`}
+                      className="border-t border-green-200 py-3 first:border-t-0 first:pt-0"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge tone="green">{w.days} days</Badge>
+                        <span className="font-mono text-sm font-bold text-jobleak-ink">
+                          {w.startDate} → {w.endDate}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-jobleak-muted">{w.detail}</p>
+                      <p className="mt-1 text-xs font-semibold text-jobleak-muted">
+                        Good for: {w.trades.map((t) => TRADE_LABEL[t]).join(', ')}
+                      </p>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
 
             {/* ---------- ASSUMPTIONS ---------- */}
             {report.valueEstimates.length > 0 && (

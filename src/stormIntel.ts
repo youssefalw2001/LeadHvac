@@ -22,9 +22,51 @@
  *   FUTURE  (up to 14 days)   demand spikes you can staff and pre-book for
  */
 
-export type Trade = 'roofing' | 'hvac' | 'plumbing' | 'restoration';
+export type Trade =
+  | 'roofing'
+  | 'hvac'
+  | 'plumbing'
+  | 'restoration'
+  | 'tree_service'
+  | 'gutters'
+  | 'solar'
+  | 'windows_glass'
+  | 'fencing'
+  | 'painting'
+  | 'concrete'
+  | 'landscaping'
+  | 'pest'
+  | 'snow_ice'
+  | 'air_quality'
+  | 'foundation';
+
+export const TRADE_LABELS: Record<Trade, string> = {
+  roofing: 'Roofing',
+  hvac: 'HVAC',
+  plumbing: 'Plumbing',
+  restoration: 'Restoration',
+  tree_service: 'Tree service',
+  gutters: 'Gutters',
+  solar: 'Solar',
+  windows_glass: 'Windows & glass',
+  fencing: 'Fencing',
+  painting: 'Painting',
+  concrete: 'Concrete & masonry',
+  landscaping: 'Landscaping & irrigation',
+  pest: 'Pest control',
+  snow_ice: 'Snow & ice',
+  air_quality: 'Air quality & duct',
+  foundation: 'Foundation',
+};
 
 export type Horizon = 'past' | 'now' | 'future';
+
+import {
+  fetchSpcReports,
+  groupByStormDay,
+  HAIL_CLAIMABLE_INCHES,
+  type SpcStormDay,
+} from './spcReports';
 
 export type Confidence = 'measured' | 'derived' | 'assumption';
 
@@ -81,8 +123,25 @@ export interface StormIntelReport {
   activeAlerts: ActiveAlert[];
   valueEstimates: JobValueEstimate[];
   dataSources: DataSourceStatus[];
+  /** Ground-truth NOAA damage reports, grouped by storm day. The best evidence we have. */
+  stormDays: SpcStormDay[];
+  /** Stretches of good weather — for trades that need to WORK, not chase. */
+  workWindows: WorkWindow[];
   /** Honest summary of what we could and could not measure. */
   limitations: string[];
+}
+
+/**
+ * The inverse signal. Painters, concrete crews and roof installers do not need
+ * to know when it stormed — they need to know when they can actually work.
+ * Nobody sells this, and every one of those trades schedules around it manually.
+ */
+export interface WorkWindow {
+  startDate: string;
+  endDate: string;
+  days: number;
+  trades: Trade[];
+  detail: string;
 }
 
 export interface ActiveAlert {
@@ -133,6 +192,10 @@ const CLAIM_WINDOW_DAYS = 365;
 
 /** How far back we pull archive data. */
 const LOOKBACK_DAYS = 120;
+/** Service radius for NOAA ground-truth reports. A typical single-crew territory. */
+const SPC_RADIUS_MILES = 40;
+/** SPC lookback. One request per day per kind, so keep this interactive-friendly. */
+const SPC_LOOKBACK_DAYS = 60;
 /** How far forward the free forecast reaches reliably. */
 const FORECAST_DAYS = 14;
 
@@ -201,6 +264,12 @@ interface DailySeries {
   temperature_2m_min?: number[];
   wind_gusts_10m_max?: number[];
   precipitation_sum?: number[];
+  snowfall_sum?: number[];
+  precipitation_hours?: number[];
+  relative_humidity_2m_mean?: number[];
+  apparent_temperature_max?: number[];
+  et0_fao_evapotranspiration?: number[];
+  wind_speed_10m_max?: number[];
 }
 
 async function fetchDaily(
@@ -214,7 +283,19 @@ async function fetchDaily(
   url.searchParams.set('longitude', String(lon));
   url.searchParams.set(
     'daily',
-    'temperature_2m_max,temperature_2m_min,wind_gusts_10m_max,precipitation_sum'
+    [
+      'temperature_2m_max',
+      'temperature_2m_min',
+      'wind_gusts_10m_max',
+      'precipitation_sum',
+      // added to support the wider trade list
+      'snowfall_sum',
+      'precipitation_hours',
+      'relative_humidity_2m_mean',
+      'apparent_temperature_max',
+      'et0_fao_evapotranspiration',
+      'wind_speed_10m_max',
+    ].join(',')
   );
   url.searchParams.set('timezone', 'auto');
   for (const [k, v] of Object.entries(extra)) url.searchParams.set(k, v);
@@ -507,6 +588,18 @@ export const DEFAULT_AVG_TICKET: Record<Trade, number> = {
   hvac: 1_500,
   plumbing: 900,
   restoration: 4_000,
+  tree_service: 1_200,
+  gutters: 1_400,
+  solar: 9_000,
+  windows_glass: 1_800,
+  fencing: 3_500,
+  painting: 4_000,
+  concrete: 5_000,
+  landscaping: 800,
+  pest: 400,
+  snow_ice: 350,
+  air_quality: 700,
+  foundation: 8_000,
 };
 
 /**
@@ -561,6 +654,154 @@ export function estimateValue(
 }
 
 /* ------------------------------------------------------------------ *
+ * EVENTS FROM GROUND-TRUTH NOAA REPORTS
+ *
+ * These are the strongest events in the product because they are OBSERVED,
+ * not modelled. "1.75 inch hail reported 4 miles from here on June 26" is
+ * evidence. "The model says gusts were elevated" is a guess.
+ * ------------------------------------------------------------------ */
+
+function eventsFromStormDays(days: SpcStormDay[], today: Date): StormEvent[] {
+  const out: StormEvent[] = [];
+
+  for (const day of days) {
+    const offset = daysBetween(today, new Date(`${day.date}T12:00:00Z`));
+    const claimLeft = CLAIM_WINDOW_DAYS + offset;
+    if (claimLeft <= 0) continue;
+
+    const near = `nearest report ${day.nearestMiles.toFixed(1)} mi away`;
+    const proof = day.sampleComment ? ` Observed: "${day.sampleComment.slice(0, 120)}"` : '';
+
+    // ---- HAIL: the highest-value signal in the entire product ----
+    if (typeof day.maxHailInches === 'number') {
+      const size = day.maxHailInches;
+      const claimable = size >= HAIL_CLAIMABLE_INCHES;
+      for (const trade of ['roofing', 'solar', 'windows_glass'] as Trade[]) {
+        // Only roofing gets the small-hail events; glass and panels need real size.
+        if (!claimable && trade !== 'roofing') continue;
+        out.push({
+          id: `spc-hail-${day.date}-${trade}`,
+          date: day.date,
+          dateSpan: day.date,
+          dayCount: 1,
+          horizon: 'past',
+          dayOffset: offset,
+          trade,
+          headline: claimable
+            ? `Claimable hail — ${size.toFixed(2)}" reported`
+            : `Hail reported — ${size.toFixed(2)}"`,
+          measurement: `NOAA storm reports: max hail ${size.toFixed(2)}" across ${day.reportCount} report${day.reportCount === 1 ? '' : 's'}, ${near}`,
+          why: claimable
+            ? `Hail at or above ${HAIL_CLAIMABLE_INCHES.toFixed(2)}" is the practical threshold for insurable shingle damage. This is observed ground truth, not a model estimate.`
+            : `Below the ${HAIL_CLAIMABLE_INCHES.toFixed(2)}" claim threshold but still causes cosmetic damage worth inspecting.`,
+          action: claimable
+            ? `Canvass this date. You can cite the NOAA report as proof of a storm event at this location.${proof}`
+            : `Worth an inspection offer, but set expectations — this may not support a full claim.${proof}`,
+          severity: size >= 1.75 ? 'critical' : claimable ? 'high' : 'moderate',
+          confidence: 'measured',
+          claimable: true,
+          claimWindowDaysLeft: claimLeft,
+        });
+      }
+    }
+
+    // ---- OBSERVED WIND DAMAGE -> tree service, fencing, gutters, roofing ----
+    if (typeof day.maxWindMph === 'number' && day.maxWindMph >= WIND_DAMAGING_MPH) {
+      const mph = day.maxWindMph;
+      const trades: Trade[] = mph >= WIND_SEVERE_MPH
+        ? ['tree_service', 'roofing', 'fencing', 'gutters']
+        : ['tree_service', 'gutters'];
+      for (const trade of trades) {
+        out.push({
+          id: `spc-wind-${day.date}-${trade}`,
+          date: day.date,
+          dateSpan: day.date,
+          dayCount: 1,
+          horizon: 'past',
+          dayOffset: offset,
+          trade,
+          headline: `Observed wind damage — ${mph} mph reported`,
+          measurement: `NOAA storm reports: peak measured wind ${mph} mph, ${day.reportCount} report${day.reportCount === 1 ? '' : 's'}, ${near}`,
+          why: 'These are human and instrument reports of actual damage, not a forecast. Downed limbs, fencing and gutters cluster in exactly these areas.',
+          action: `Work the streets named in the reports first — damage is spatially clustered.${proof}`,
+          severity: mph >= 70 ? 'critical' : 'high',
+          confidence: 'measured',
+          claimable: true,
+          claimWindowDaysLeft: claimLeft,
+        });
+      }
+    }
+
+    // ---- TORNADO -> restoration ----
+    if (day.tornadoCount > 0) {
+      out.push({
+        id: `spc-torn-${day.date}`,
+        date: day.date,
+        dateSpan: day.date,
+        dayCount: 1,
+        horizon: 'past',
+        dayOffset: offset,
+        trade: 'restoration',
+        headline: `Tornado reported — ${day.tornadoCount} report${day.tornadoCount === 1 ? '' : 's'}`,
+        measurement: `NOAA tornado reports within radius, ${near}`,
+        why: 'Tornado damage is severe, concentrated and almost always insured.',
+        action:
+          'Check state rules before soliciting. Many states restrict contractor solicitation after a declared disaster.',
+        severity: 'critical',
+        confidence: 'measured',
+        claimable: true,
+        claimWindowDaysLeft: claimLeft,
+      });
+    }
+  }
+
+  return out;
+}
+
+/* ------------------------------------------------------------------ *
+ * WORK WINDOWS — the inverse signal
+ * ------------------------------------------------------------------ */
+
+/** Exterior paint, concrete and roof installs need dry, mild, low-wind days. */
+function findWorkWindows(daily: DailySeries, today: Date): WorkWindow[] {
+  const dates = daily.time ?? [];
+  const good: { date: string; offset: number }[] = [];
+
+  for (let i = 0; i < dates.length; i++) {
+    const rain = daily.precipitation_sum?.[i] ?? 0;
+    const gust = daily.wind_gusts_10m_max?.[i];
+    const maxC = daily.temperature_2m_max?.[i];
+    const minC = daily.temperature_2m_min?.[i];
+    if (maxC == null || minC == null) continue;
+    const maxF = fFromC(maxC);
+    const minF = fFromC(minC);
+    const gustMph = gust != null ? mphFromKmh(gust) : 0;
+
+    // Paint needs dry, above ~50F overnight, below ~90F, and not windy.
+    const dry = rain < 1;
+    const mild = minF >= 50 && maxF <= 92;
+    const calm = gustMph < 25;
+    if (dry && mild && calm) {
+      const offset = daysBetween(today, new Date(`${dates[i]}T12:00:00Z`));
+      if (offset >= 0) good.push({ date: dates[i], offset });
+    }
+  }
+
+  const windows: WorkWindow[] = [];
+  for (const cluster of clusterConsecutive(good.map((g) => ({ ...g, value: 1 })))) {
+    if (cluster.length < 2) continue;
+    windows.push({
+      startDate: cluster[0].date,
+      endDate: cluster[cluster.length - 1].date,
+      days: cluster.length,
+      trades: ['painting', 'concrete', 'roofing', 'fencing'],
+      detail: `${cluster.length} consecutive days dry, 50-92°F, gusts under 25 mph — bookable exterior work`,
+    });
+  }
+  return windows.sort((a, b) => b.days - a.days);
+}
+
+/* ------------------------------------------------------------------ *
  * MAIN ENTRY POINT
  * ------------------------------------------------------------------ */
 
@@ -579,6 +820,8 @@ export async function buildStormIntelReport(query: string): Promise<StormIntelRe
       events: [],
       activeAlerts: [],
       valueEstimates: [],
+      stormDays: [],
+      workWindows: [],
       dataSources: [
         {
           name: 'Open-Meteo Geocoding',
@@ -602,7 +845,7 @@ export async function buildStormIntelReport(query: string): Promise<StormIntelRe
   // Archive lags ~5 days behind real time.
   const archiveEnd = new Date(today.getTime() - 5 * MS_PER_DAY);
 
-  const [forecast, archive, alerts] = await Promise.all([
+  const [forecast, archive, alerts, spc] = await Promise.all([
     fetchDaily('https://api.open-meteo.com/v1/forecast', area.latitude, area.longitude, {
       forecast_days: String(FORECAST_DAYS),
     }),
@@ -611,9 +854,27 @@ export async function buildStormIntelReport(query: string): Promise<StormIntelRe
       end_date: isoDate(archiveEnd),
     }),
     fetchActiveAlerts(area.latitude, area.longitude),
+    fetchSpcReports({
+      latitude: area.latitude,
+      longitude: area.longitude,
+      radiusMiles: SPC_RADIUS_MILES,
+      days: SPC_LOOKBACK_DAYS,
+      kinds: ['hail', 'wind', 'torn'],
+    }),
   ]);
 
   const events: StormEvent[] = [];
+
+  // Ground-truth NOAA reports first — this is the strongest evidence we have.
+  const stormDays = groupByStormDay(spc.reports);
+  events.push(...eventsFromStormDays(stormDays, today));
+  const claimableHailDays = stormDays.filter((d) => d.claimableHail).length;
+  sources.push({
+    name: 'NOAA Storm Prediction Center',
+    endpoint: 'spc.noaa.gov/climo/reports',
+    status: 'live',
+    detail: `${spc.reports.length} observed damage report${spc.reports.length === 1 ? '' : 's'} within ${SPC_RADIUS_MILES} mi over ${SPC_LOOKBACK_DAYS} days · ${stormDays.length} storm days · ${claimableHailDays} with claimable hail`,
+  });
 
   if (forecast) {
     events.push(...eventsFromSeries(forecast, today, 'future'));
@@ -658,11 +919,16 @@ export async function buildStormIntelReport(query: string): Promise<StormIntelRe
     detail: `${alerts.length} active weather alert${alerts.length === 1 ? '' : 's'} for this point`,
   });
 
+  const workWindows = forecast ? findWorkWindows(forecast, today) : [];
+
   limitations.push(
-    'Hail size is not available from these free endpoints. Hail is the single biggest driver of roof claims, so treat wind as a proxy and confirm hail locally.',
+    `NOAA reports are spotter and instrument observations, so coverage depends on someone being there to report it. Absence of a report is not proof there was no hail.`,
+    `NOAA reports are filtered to ${SPC_RADIUS_MILES} miles of the geocoded point and the last ${SPC_LOOKBACK_DAYS} days. Widen or narrow to match your real service area.`,
+    'Open-Meteo wind and temperature are modelled at the nearest grid point, not measured at each address. Treat them as area-level.',
     'Archive data lags roughly 5 days behind today.',
-    'Wind gusts are measured at the nearest grid point, not at each address. Treat them as area-level, not property-level.',
-    'Dollar figures combine measured weather with assumed close rates and ticket sizes. Substitute your own numbers.'
+    'Pollen data is not available for US locations from this provider.',
+    'Dollar figures combine measured weather with assumed close rates and ticket sizes. Substitute your own numbers.',
+    'Check your state rules before soliciting after a storm. Many restrict contractor solicitation after a declared disaster, and discussing a claim on a homeowner\u2019s behalf can require a public adjuster licence.'
   );
 
   events.sort((a, b) => {
@@ -677,6 +943,8 @@ export async function buildStormIntelReport(query: string): Promise<StormIntelRe
     events,
     activeAlerts: alerts,
     valueEstimates: estimateValue(events),
+    stormDays,
+    workWindows,
     dataSources: sources,
     limitations,
   };
