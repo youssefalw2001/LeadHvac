@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { AlertSignup } from './AlertSignup';
 import { Badge } from './components/ui/Badge';
 import { Card, CardContent, CardHeader } from './components/ui/Card';
 import { cn } from './lib/utils';
@@ -370,6 +371,12 @@ export function StormRadar() {
               subtitle="Heat, freeze and rainfall events from the last few months. These do not create insurance claims — they show you when your phone was busy and who you never got back to."
               events={pastDemand}
               empty="No significant temperature or rainfall events in the lookback window."
+            />
+
+            {/* ---------- ALERTS: the paid product ---------- */}
+            <AlertSignup
+              area={report.area}
+              defaultTrade={trade === 'all' ? tradesPresent[0] : trade}
             />
 
             {/* ---------- WORK WINDOWS (the inverse signal) ---------- */}

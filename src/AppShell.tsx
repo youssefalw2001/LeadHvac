@@ -22,8 +22,27 @@ export function AppShell({
     <div className="jl-shell">
       <nav className="jl-nav" aria-label="Main">
         <a className="jl-nav__brand" href="#">
-          <span className="jl-nav__dot" aria-hidden="true" />
-          JobLeak
+          {/* The real brand mark from components/brand/JobLeakMark, reduced to a
+              nav-scale lockup. Radar rings + the orange signal ping. */}
+          <span className="jl-navmark" aria-hidden="true">
+            <svg viewBox="0 0 44 44">
+              <defs>
+                <linearGradient id="jlNavBlue" x1="6" y1="6" x2="38" y2="38">
+                  <stop stopColor="#2f6df6" />
+                  <stop offset="1" stopColor="#0b3b9e" />
+                </linearGradient>
+              </defs>
+              <circle cx="22" cy="20" r="13" fill="none" stroke="url(#jlNavBlue)" strokeWidth="2.8" />
+              <circle cx="22" cy="20" r="7.4" fill="none" stroke="#2f6df6" strokeWidth="2.2" opacity="0.7" />
+              <circle cx="22" cy="20" r="3.2" fill="#2f6df6" />
+              <path d="M22 20 33 9" stroke="#eaf2ff" strokeWidth="2.6" strokeLinecap="round" />
+              <circle cx="34.2" cy="7.8" r="3.4" fill="#ff7a1a" />
+            </svg>
+          </span>
+          <span className="jl-brandtext">
+            <b>JobLeak</b>
+            <span>Storm Intelligence</span>
+          </span>
         </a>
         {NAV_ITEMS.map((item) => (
           <a
