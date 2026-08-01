@@ -46,10 +46,12 @@ for (const horizon of ['now', 'past', 'future'] as const) {
   console.log('-'.repeat(76));
   for (const e of list.slice(0, 8)) {
     const claim = e.claimWindowDaysLeft ? `  [${e.claimWindowDaysLeft}d claim window left]` : '';
-    console.log(`\n  ${e.date}  ${e.severity.toUpperCase()}  ${e.trade}${claim}`);
+    const fos = e.firstOfSeason ? '  [FIRST OF SEASON]' : '';
+    console.log(`\n  ${e.date}  ${e.severity.toUpperCase()}  ${e.trade}${claim}${fos}`);
     console.log(`  ${e.headline}`);
     console.log(`     measured: ${e.measurement}`);
     console.log(`     action:   ${e.action}`);
+    if (e.services.length) console.log(`     jobs:     ${e.services.join(' | ')}`);
   }
 }
 

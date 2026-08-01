@@ -95,6 +95,18 @@ export interface StormEvent {
   claimable: boolean;
   /** Only present when a claim deadline actually applies. */
   claimWindowDaysLeft?: number;
+  /**
+   * The specific jobs to sell off this event. "HVAC demand" is not actionable;
+   * "AC capacitor and contactor replacement" is what you stock the truck with.
+   */
+  services: string[];
+  /**
+   * True when this is the first qualifying event of its kind after a long gap.
+   * This matters more than magnitude: the first 100F day after a mild spring
+   * breaks every marginal compressor at once, because they have all sat unused.
+   * The tenth 100F day breaks far fewer, because the weak ones already failed.
+   */
+  firstOfSeason?: boolean;
 }
 
 export interface JobValueEstimate {
@@ -354,6 +366,26 @@ function spanLabel(cluster: DayHit[]) {
   return cluster.length === 1 ? first : `${first} → ${last} (${cluster.length} days)`;
 }
 
+/**
+ * Days of quiet required before an event counts as "first of season".
+ * Two weeks is enough for equipment to have been idle and for homeowners to
+ * have stopped thinking about it.
+ */
+const FIRST_OF_SEASON_GAP_DAYS = 21;
+
+/**
+ * Marks the first cluster in a series, and any cluster preceded by a long gap,
+ * as first-of-season. Equipment failure is concentrated in these windows.
+ */
+function markFirstOfSeason(clusters: DayHit[][]): boolean[] {
+  return clusters.map((cluster, i) => {
+    if (i === 0) return true;
+    const prev = clusters[i - 1];
+    const gap = cluster[0].offset - prev[prev.length - 1].offset;
+    return gap >= FIRST_OF_SEASON_GAP_DAYS;
+  });
+}
+
 function eventsFromSeries(
   daily: DailySeries,
   today: Date,
@@ -416,7 +448,9 @@ function eventsFromSeries(
       | 'dayCount'
       | 'claimable'
       | 'claimWindowDaysLeft'
-    >
+      | 'firstOfSeason'
+    >,
+    firstOfSeason = false
   ) => {
     const isLow = category === 'freeze_burst' || category === 'cold_furnace';
     const peakHit = cluster.reduce((best, h) =>
@@ -426,8 +460,18 @@ function eventsFromSeries(
     // Claim windows only apply to insurable physical damage (wind/hail).
     const claimable = category === 'wind_severe' || category === 'wind_damaging';
     const claimLeft = CLAIM_WINDOW_DAYS + peakHit.offset;
+    // First-of-season events get bumped a severity level, because failure
+    // volume is concentrated there rather than spread across the season.
+    const severity: StormEvent['severity'] =
+      firstOfSeason && built.severity === 'high'
+        ? 'critical'
+        : firstOfSeason && built.severity === 'moderate'
+          ? 'high'
+          : built.severity;
+
     out.push({
       ...built,
+      severity,
       id: `${category}-${cluster[0].date}`,
       date: peakHit.date,
       dateSpan: spanLabel(cluster),
@@ -436,6 +480,7 @@ function eventsFromSeries(
       dayOffset: peakHit.offset,
       confidence: 'measured',
       claimable,
+      firstOfSeason: firstOfSeason || undefined,
       claimWindowDaysLeft:
         claimable && horizon === 'past' && claimLeft > 0 ? claimLeft : undefined,
     });
@@ -450,6 +495,14 @@ function eventsFromSeries(
           : 'Severe wind event forecast',
       measurement: `Peak gusts ${peak.toFixed(0)} mph over ${days} day${days === 1 ? '' : 's'} (NWS severe threshold ${WIND_SEVERE_MPH} mph)`,
       why: 'Gusts at or above the severe threshold lift shingles, tear flashing and pull gutters. This damage is usually insurable.',
+      services: [
+        'Free storm damage roof inspection',
+        'Shingle replacement',
+        'Flashing and ridge cap repair',
+        'Emergency tarping',
+        'Insurance claim documentation',
+        'Full roof replacement',
+      ],
       action:
         horizon === 'past'
           ? 'Canvass these dates. Most homeowners have no idea they have claimable damage until someone inspects the roof.'
@@ -464,35 +517,83 @@ function eventsFromSeries(
       headline: 'Damaging wind — roof and gutter work likely',
       measurement: `Peak gusts ${peak.toFixed(0)} mph over ${days} day${days === 1 ? '' : 's'} (damage threshold ~${WIND_DAMAGING_MPH} mph)`,
       why: 'Below severe criteria but routinely enough for lifted shingles, bent flashing and detached gutters.',
+      services: [
+        'Roof and gutter inspection',
+        'Gutter re-securing',
+        'Individual shingle repair',
+        'Downspout reattachment',
+      ],
       action: 'Worth a targeted door-knock or postcard drop offering free roof and gutter inspections.',
       severity: 'moderate',
     }));
   }
 
-  for (const cluster of clusterConsecutive(hits.heat_critical)) {
-    emit('heat_critical', cluster, (peak, days, peakDate) => ({
-      trade: 'hvac',
-      headline:
-        days > 2 ? 'Extended heatwave — AC failure surge' : 'Extreme heat — AC failure surge',
-      measurement: `Peak ${peak.toFixed(0)}°F on ${peakDate}, ${days} day${days === 1 ? '' : 's'} above ${HEAT_AC_CRITICAL_F}°F`,
-      why: 'Older condensers fail under sustained extreme load. Emergency volume spikes and price sensitivity drops.',
-      action:
-        horizon === 'future'
-          ? `Stock capacitors and contactors now, extend hours, and text your maintenance list before day one.`
-          : 'Follow up with anyone you could not get to during this stretch — many are still running a marginal system.',
-      severity: 'critical',
-    }));
+  {
+    const clusters = clusterConsecutive(hits.heat_critical);
+    const firsts = markFirstOfSeason(clusters);
+    clusters.forEach((cluster, i) =>
+      emit(
+        'heat_critical',
+        cluster,
+        (peak, days, peakDate) => ({
+          trade: 'hvac',
+          headline: firsts[i]
+            ? 'First extreme heat of the season — peak AC failure window'
+            : days > 2
+              ? 'Extended heatwave — AC failure surge'
+              : 'Extreme heat — AC failure surge',
+          measurement: `Peak ${peak.toFixed(0)}°F on ${peakDate}, ${days} day${days === 1 ? '' : 's'} above ${HEAT_AC_CRITICAL_F}°F`,
+          why: firsts[i]
+            ? 'The first extreme heat after a mild stretch breaks every marginal compressor at once, because they have all been sitting idle. Later heatwaves produce far fewer failures — the weak systems have already died.'
+            : 'Older condensers fail under sustained extreme load. Emergency volume spikes and price sensitivity drops.',
+          action:
+            horizon === 'future'
+              ? 'Stock capacitors, contactors and condenser fan motors now, extend hours, and text your maintenance list before day one.'
+              : 'Follow up with anyone you could not reach during this stretch — many are still limping along on a marginal system.',
+          services: [
+            'Emergency AC repair',
+            'Capacitor replacement',
+            'Contactor replacement',
+            'Condenser fan motor',
+            'Refrigerant leak diagnosis',
+            'Full system replacement (for units 12+ years old)',
+          ],
+          severity: 'critical',
+        }),
+        firsts[i]
+      )
+    );
   }
 
-  for (const cluster of clusterConsecutive(hits.heat_stress)) {
-    emit('heat_stress', cluster, (peak, days) => ({
-      trade: 'hvac',
-      headline: 'Heat stress — tune-up and repair demand',
-      measurement: `Peak ${peak.toFixed(0)}°F over ${days} day${days === 1 ? '' : 's'} (stress threshold ${HEAT_AC_STRESS_F}°F)`,
-      why: 'The first hot stretch of a season is when neglected systems announce themselves.',
-      action: 'Push tune-up offers to your existing list before competitors book out.',
-      severity: 'high',
-    }));
+  {
+    const clusters = clusterConsecutive(hits.heat_stress);
+    const firsts = markFirstOfSeason(clusters);
+    clusters.forEach((cluster, i) =>
+      emit(
+        'heat_stress',
+        cluster,
+        (peak, days) => ({
+          trade: 'hvac',
+          headline: firsts[i]
+            ? 'First real heat of the season — tune-up window'
+            : 'Heat stress — tune-up and repair demand',
+          measurement: `Peak ${peak.toFixed(0)}°F over ${days} day${days === 1 ? '' : 's'} (stress threshold ${HEAT_AC_STRESS_F}°F)`,
+          why: firsts[i]
+            ? 'This is the week homeowners first switch the AC on and discover it is weak. Highest tune-up conversion of the year, and it happens before your competitors are busy.'
+            : 'Sustained heat surfaces neglected systems that were coasting.',
+          action: 'Push tune-up offers to your existing list now, before you are booked out and forced to turn away replacements.',
+          services: [
+            'AC tune-up / seasonal service',
+            'Coil cleaning',
+            'Refrigerant top-up',
+            'Thermostat upgrade',
+            'Maintenance plan enrolment',
+          ],
+          severity: 'high',
+        }),
+        firsts[i]
+      )
+    );
   }
 
   for (const cluster of clusterConsecutive(hits.freeze_burst)) {
@@ -501,6 +602,13 @@ function eventsFromSeries(
       headline: 'Hard freeze — burst pipe risk',
       measurement: `Low of ${peak.toFixed(0)}°F over ${days} day${days === 1 ? '' : 's'} (burst risk below ~${COLD_PIPE_BURST_F}°F)`,
       why: 'Uninsulated and exterior-wall pipes fail in the sustained low 20s. Bursts become water damage jobs.',
+      services: [
+        'Emergency burst pipe repair',
+        'Pipe insulation / heat tape',
+        'Outdoor spigot and irrigation winterisation',
+        'Water shut-off valve replacement',
+        'Water damage mitigation referral',
+      ],
       action:
         horizon === 'future'
           ? 'Send freeze-prevention tips now. It books insulation work and earns goodwill before the emergency calls land.'
@@ -515,6 +623,13 @@ function eventsFromSeries(
       headline: 'Freezing temps — heating demand',
       measurement: `Low of ${peak.toFixed(0)}°F over ${days} day${days === 1 ? '' : 's'} (freezing at ${COLD_FURNACE_F}°F)`,
       why: 'The first freeze of a season reliably produces no-heat calls from systems that sat unused all summer.',
+      services: [
+        'No-heat emergency call',
+        'Furnace tune-up and safety inspection',
+        'Ignitor / flame sensor replacement',
+        'Heat exchanger inspection',
+        'Furnace replacement (units 15+ years old)',
+      ],
       action: 'Promote furnace checks, prioritising homes with systems you already know are aging.',
       severity: 'moderate',
     }));
@@ -527,6 +642,13 @@ function eventsFromSeries(
       headline: 'Heavy rainfall — water intrusion and drainage',
       measurement: `${total.toFixed(0)} mm (${(total / 25.4).toFixed(1)} in) across ${days} day${days === 1 ? '' : 's'}, peak ${(peak / 25.4).toFixed(1)} in`,
       why: 'Heavy rainfall drives basement seepage, sump failures and roof-leak discovery.',
+      services: [
+        'Water extraction and drying',
+        'Sump pump repair or replacement',
+        'Basement waterproofing',
+        'Roof leak detection',
+        'Mould inspection (48-72h after intrusion)',
+      ],
       action: 'Target drainage, sump pump and leak-detection offers in low-lying parts of your area.',
       severity: total >= HEAVY_RAIN_MM * 3 ? 'high' : 'moderate',
     }));
@@ -661,6 +783,57 @@ export function estimateValue(
  * evidence. "The model says gusts were elevated" is a guess.
  * ------------------------------------------------------------------ */
 
+/** Services to sell off observed hail, by trade. */
+const HAIL_SERVICES: Partial<Record<Trade, string[]>> = {
+  roofing: [
+    'Free hail damage inspection',
+    'Insurance claim documentation and adjuster meeting',
+    'Shingle replacement',
+    'Ridge vent and flashing repair',
+    'Full roof replacement',
+  ],
+  solar: [
+    'Solar panel hail damage inspection',
+    'Microcrack / output testing',
+    'Panel replacement',
+    'Racking and flashing inspection',
+  ],
+  windows_glass: [
+    'Window and skylight inspection',
+    'Cracked pane replacement',
+    'Screen replacement',
+    'Emergency board-up',
+  ],
+};
+
+/** Services to sell off observed wind damage, by trade. */
+const WIND_SERVICES: Partial<Record<Trade, string[]>> = {
+  tree_service: [
+    'Emergency limb and tree removal',
+    'Hazard tree assessment',
+    'Stump grinding',
+    'Crown thinning to reduce future wind load',
+  ],
+  roofing: [
+    'Free wind damage inspection',
+    'Shingle and flashing repair',
+    'Emergency tarping',
+    'Insurance claim documentation',
+  ],
+  fencing: [
+    'Fence panel replacement',
+    'Post resetting',
+    'Gate realignment',
+    'Full fence replacement',
+  ],
+  gutters: [
+    'Gutter re-securing and realignment',
+    'Downspout reattachment',
+    'Gutter replacement',
+    'Debris clearing',
+  ],
+};
+
 function eventsFromStormDays(days: SpcStormDay[], today: Date): StormEvent[] {
   const out: StormEvent[] = [];
 
@@ -697,6 +870,7 @@ function eventsFromStormDays(days: SpcStormDay[], today: Date): StormEvent[] {
           action: claimable
             ? `Canvass this date. You can cite the NOAA report as proof of a storm event at this location.${proof}`
             : `Worth an inspection offer, but set expectations — this may not support a full claim.${proof}`,
+          services: HAIL_SERVICES[trade] ?? ['Storm damage inspection'],
           severity: size >= 1.75 ? 'critical' : claimable ? 'high' : 'moderate',
           confidence: 'measured',
           claimable: true,
@@ -724,6 +898,7 @@ function eventsFromStormDays(days: SpcStormDay[], today: Date): StormEvent[] {
           measurement: `NOAA storm reports: peak measured wind ${mph} mph, ${day.reportCount} report${day.reportCount === 1 ? '' : 's'}, ${near}`,
           why: 'These are human and instrument reports of actual damage, not a forecast. Downed limbs, fencing and gutters cluster in exactly these areas.',
           action: `Work the streets named in the reports first — damage is spatially clustered.${proof}`,
+          services: WIND_SERVICES[trade] ?? ['Storm damage inspection'],
           severity: mph >= 70 ? 'critical' : 'high',
           confidence: 'measured',
           claimable: true,
@@ -747,6 +922,13 @@ function eventsFromStormDays(days: SpcStormDay[], today: Date): StormEvent[] {
         why: 'Tornado damage is severe, concentrated and almost always insured.',
         action:
           'Check state rules before soliciting. Many states restrict contractor solicitation after a declared disaster.',
+        services: [
+          'Emergency board-up and tarping',
+          'Debris removal',
+          'Structural drying',
+          'Contents pack-out',
+          'Full rebuild coordination',
+        ],
         severity: 'critical',
         confidence: 'measured',
         claimable: true,
