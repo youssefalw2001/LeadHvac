@@ -203,6 +203,17 @@ export function StormRadar() {
           </div>
         )}
 
+        {loading && (
+          <div className="space-y-4" aria-live="polite" aria-busy="true">
+            <p className="text-sm font-bold text-jobleak-muted">
+              Reading NOAA storm reports, forecast and active alerts…
+            </p>
+            <div className="jl-skeleton h-28 w-full" />
+            <div className="jl-skeleton h-48 w-full" />
+            <div className="jl-skeleton h-48 w-full" />
+          </div>
+        )}
+
         {!report && !loading && (
           <Card>
             <CardContent className="py-10 text-center">

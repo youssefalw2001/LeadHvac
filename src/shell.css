@@ -1,0 +1,146 @@
+/* ------------------------------------------------------------------ *
+ * APP SHELL + PRINT
+ * ------------------------------------------------------------------ */
+
+.jl-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.jl-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.75rem 1.5rem;
+  background: #0b1220;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.jl-nav__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-right: auto;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: #fff;
+  text-decoration: none;
+  font-size: 1.0625rem;
+}
+
+.jl-nav__dot {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 999px;
+  background: #f97316;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.25);
+}
+
+.jl-nav__link {
+  padding: 0.5rem 0.875rem;
+  border-radius: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.62);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.15s, background 0.15s;
+}
+
+.jl-nav__link:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.jl-nav__link--active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.jl-footer {
+  margin-top: auto;
+  padding: 2rem 1.5rem;
+  background: #0b1220;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.75rem;
+  line-height: 1.7;
+}
+
+.jl-footer a {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.jl-footer__inner {
+  max-width: 56rem;
+  margin: 0 auto;
+}
+
+/* skeleton shimmer used while scans run */
+@keyframes jl-shimmer {
+  0% { opacity: 0.55; }
+  50% { opacity: 1; }
+  100% { opacity: 0.55; }
+}
+
+.jl-skeleton {
+  animation: jl-shimmer 1.4s ease-in-out infinite;
+  background: #e2e8f0;
+  border-radius: 0.5rem;
+}
+
+/* ------------------------------------------------------------------ *
+ * PRINT — the claim report has to come out clean on paper, because it
+ * gets handed to homeowners and insurance adjusters.
+ * ------------------------------------------------------------------ */
+
+@media print {
+  .no-print,
+  .jl-nav,
+  .jl-footer {
+    display: none !important;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    margin: 0;
+    padding: 0;
+  }
+
+  .print-document {
+    border: 0 !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+    box-shadow: none !important;
+  }
+
+  /* keep table rows and sections from splitting awkwardly */
+  table {
+    page-break-inside: auto;
+  }
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  thead {
+    display: table-header-group;
+  }
+  h2,
+  h3 {
+    page-break-after: avoid;
+  }
+
+  a[href]::after {
+    content: '';
+  }
+
+  @page {
+    margin: 0.6in;
+  }
+}
