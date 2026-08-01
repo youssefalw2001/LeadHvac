@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { AlertSignup } from './AlertSignup';
+import { parseInput, PRIMARY_SERVICE, type ParsedInput } from './tradeParser';
 import { Badge } from './components/ui/Badge';
 import { Card, CardContent, CardHeader } from './components/ui/Card';
 import { cn } from './lib/utils';
@@ -124,16 +125,29 @@ export function StormRadar() {
   const [report, setReport] = useState<StormIntelReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [trade, setTrade] = useState<Trade | 'all'>('all');
+  const [parsedInput, setParsedInput] = useState<ParsedInput | null>(null);
 
   const run = useCallback(async (q: string) => {
     if (!q.trim()) return;
     setLoading(true);
     setError(null);
+
+    // Read the sentence first: "I'm an HVAC guy in the Bronx" gives us both the
+    // trade and the place, so the report can filter itself instead of making
+    // the user click chips.
+    const parsed = parseInput(q);
+    setParsedInput(parsed);
+    if (parsed.trade) setTrade(parsed.trade);
+
+    const locationQuery = parsed.location || q;
+
     try {
-      const result = await buildStormIntelReport(q);
+      const result = await buildStormIntelReport(locationQuery);
       setReport(result);
       if (!result.area.resolved) {
-        setError(`Could not find "${q}". Try a format like "Dallas, Texas".`);
+        setError(
+          `Could not find "${locationQuery}". Try adding the state — for example "Bronx, New York".`
+        );
       }
     } catch {
       setError('Something went wrong fetching weather data. Try again.');
@@ -170,6 +184,80 @@ export function StormRadar() {
     return [...new Set(report.events.map((e) => e.trade))];
   }, [report]);
 
+  /**
+   * The single most valuable thing, in one sentence.
+   *
+   * Ranking: a live NWS alert beats claimable damage, which beats an imminent
+   * forecast event, which beats recent demand history. Anything else and we say
+   * plainly that it is quiet rather than dressing up filler as an opportunity.
+   */
+  const headline = useMemo(() => {
+    if (!report || !report.area.resolved) return null;
+    const place = report.area.name;
+
+    if (report.activeAlerts.length > 0) {
+      const a = report.activeAlerts[0];
+      return {
+        label: 'Happening now',
+        title: `${a.event} active in ${place} right now.`,
+        detail: `${a.headline} Phones are ringing while this is live — answer them and get booked before it expires.`,
+        services: filtered[0]?.services ?? [],
+      };
+    }
+
+    // Biggest opportunity first, then tightest deadline. Sorting by deadline
+    // alone surfaces the oldest small event over 2" hail, which is the wrong
+    // answer to "where is my best money".
+    const severityRank = { critical: 0, high: 1, moderate: 2 } as const;
+    const claim = claimable
+      .slice()
+      .sort(
+        (a, b) =>
+          severityRank[a.severity] - severityRank[b.severity] ||
+          (a.claimWindowDaysLeft ?? 9999) - (b.claimWindowDaysLeft ?? 9999)
+      )[0];
+    if (claim) {
+      return {
+        label: 'Your best money right now',
+        title: claim.headline.includes('hail')
+          ? `${claim.measurement.match(/[\d.]+"/)?.[0] ?? 'Claimable'} hail hit ${place} on ${claim.date}.`
+          : `Storm damage in ${place} on ${claim.date} is still claimable.`,
+        detail: `${claim.claimWindowDaysLeft} days left in a typical claim window. ${claim.action}`,
+        services: claim.services,
+      };
+    }
+
+    const soon = future
+      .filter((e) => e.severity === 'critical' || e.severity === 'high')
+      .sort((a, b) => a.dayOffset - b.dayOffset)[0];
+    if (soon) {
+      return {
+        label: `${soon.dayOffset} day${soon.dayOffset === 1 ? '' : 's'} of lead time`,
+        title: `${soon.headline} in ${place}.`,
+        detail: `${soon.measurement}. ${soon.action}`,
+        services: soon.services,
+      };
+    }
+
+    const recent = pastDemand[0];
+    if (recent) {
+      return {
+        label: 'Nothing urgent',
+        title: `No storm damage or demand spike in ${place} right now.`,
+        detail: `The most recent activity was ${recent.headline.toLowerCase()} on ${recent.date}. Quiet weeks are for maintenance offers, reviews and building your storm campaign so it is ready to switch on.`,
+        services: recent.services,
+      };
+    }
+
+    return {
+      label: 'All quiet',
+      title: `Nothing measurable in ${place} in the last ${THRESHOLDS.LOOKBACK_DAYS} days.`,
+      detail:
+        'No NOAA damage reports and no forecast spikes. Get on alerts below so you are told the moment that changes, instead of checking.',
+      services: [],
+    };
+  }, [report, filtered, claimable, future, pastDemand]);
+
   return (
     <div className="min-h-screen bg-jobleak-paper">
       {/* ---------- HERO ---------- */}
@@ -177,14 +265,13 @@ export function StormRadar() {
         <div className="mx-auto max-w-4xl">
           <Badge tone="orange">Storm Intelligence</Badge>
           <h1 className="mt-4 text-4xl font-black leading-tight tracking-tight md:text-5xl">
-            Every storm in your service area.
+            Tell us what you do and where.
             <br />
-            <span className="text-jobleak-orange">Dated, measured, still claimable.</span>
+            <span className="text-jobleak-orange">We'll find the work.</span>
           </h1>
           <p className="mt-4 max-w-2xl text-lg leading-relaxed text-slate-300">
-            We read live and historical weather for your area and tell you which days
-            produced work you can still sell — plus what is coming, early enough to
-            staff for it.
+            Type it how you'd say it. We read NOAA storm reports, the 14-day forecast and
+            live weather alerts, then hand you the jobs that are actually sellable right now.
           </p>
 
           <form
@@ -197,9 +284,9 @@ export function StormRadar() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Your service area — e.g. Dallas, Texas"
+              placeholder="I'm an HVAC guy in the Bronx"
               className="w-full rounded-2xl border-0 px-5 py-4 text-base font-semibold text-jobleak-ink outline-none ring-2 ring-transparent focus:ring-jobleak-orange"
-              aria-label="Service area"
+              aria-label="What you do and where you work"
             />
             <button
               type="submit"
@@ -210,8 +297,28 @@ export function StormRadar() {
             </button>
           </form>
 
-          <p className="mt-3 text-xs font-semibold text-slate-400">
-            Free public data — NWS and Open-Meteo. No account, no API key, nothing stored.
+          <div className="mt-4 flex flex-wrap gap-2">
+            {[
+              "I'm a roofer in Oklahoma City",
+              'tree service Denver CO',
+              'I do gutters around Kansas City',
+            ].map((example) => (
+              <button
+                key={example}
+                type="button"
+                onClick={() => {
+                  setQuery(example);
+                  void run(example);
+                }}
+                className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-bold text-slate-300 transition hover:border-white/40 hover:text-white"
+              >
+                {example}
+              </button>
+            ))}
+          </div>
+
+          <p className="mt-4 text-xs font-semibold text-slate-400">
+            Free forever. NOAA and NWS data. No account, no card, nothing stored.
           </p>
         </div>
       </header>
@@ -252,6 +359,61 @@ export function StormRadar() {
 
         {report && report.area.resolved && (
           <>
+            {/* ---------- WHAT WE READ ---------- */}
+            {parsedInput?.wasNaturalLanguage && (
+              <div className="mb-5 flex flex-wrap items-center gap-2 text-sm">
+                <span className="font-black uppercase tracking-[0.14em] text-[11px] text-jobleak-muted">
+                  We read
+                </span>
+                {parsedInput.trade ? (
+                  <Badge tone="blue">{TRADE_LABEL[parsedInput.trade]}</Badge>
+                ) : (
+                  <Badge tone="orange">No trade detected</Badge>
+                )}
+                <span className="font-bold text-jobleak-ink">
+                  in {report.area.name}
+                  {report.area.state ? `, ${report.area.state}` : ''}
+                </span>
+                {!parsedInput.trade && (
+                  <span className="text-xs font-semibold text-jobleak-muted">
+                    — pick your trade below to filter this down
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* ---------- THE ANSWER, FIRST ---------- */}
+            {headline && (
+              <div className="mb-6 rounded-3xl border-2 border-jobleak-ink bg-white p-6 md:p-8">
+                <span className="text-[11px] font-black uppercase tracking-[0.16em] text-jobleak-orange">
+                  {headline.label}
+                </span>
+                <h2 className="mt-3 text-2xl font-black leading-tight tracking-tight text-jobleak-ink md:text-3xl">
+                  {headline.title}
+                </h2>
+                <p className="mt-3 max-w-2xl text-base leading-relaxed text-jobleak-muted">
+                  {headline.detail}
+                </p>
+                {headline.services.length > 0 && (
+                  <div className="mt-5 border-t border-jobleak-border pt-4">
+                    <span className="text-[11px] font-black uppercase tracking-[0.14em] text-jobleak-muted">
+                      Start with these
+                    </span>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {headline.services.slice(0, 4).map((s) => (
+                        <span
+                          key={s}
+                          className="rounded-lg bg-jobleak-ink px-2.5 py-1.5 text-xs font-bold text-white"
+                        >
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ---------- SUMMARY ---------- */}
             <Card className="mb-6 border-jobleak-blue/30 bg-white">
               <CardContent className="py-6">

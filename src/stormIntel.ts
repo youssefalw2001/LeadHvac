@@ -38,7 +38,11 @@ export type Trade =
   | 'pest'
   | 'snow_ice'
   | 'air_quality'
-  | 'foundation';
+  | 'foundation'
+  // Recovered from the original realSignals industry list, which had these and
+  // the rewrite dropped them.
+  | 'electrical'
+  | 'garage_doors';
 
 export const TRADE_LABELS: Record<Trade, string> = {
   roofing: 'Roofing',
@@ -57,6 +61,8 @@ export const TRADE_LABELS: Record<Trade, string> = {
   snow_ice: 'Snow & ice',
   air_quality: 'Air quality & duct',
   foundation: 'Foundation',
+  electrical: 'Electrical',
+  garage_doors: 'Garage doors',
 };
 
 export type Horizon = 'past' | 'now' | 'future';
@@ -233,37 +239,112 @@ function fFromC(c: number) {
  * GEOCODING
  * ------------------------------------------------------------------ */
 
-export async function resolveServiceArea(query: string): Promise<ServiceArea> {
-  const trimmed = query.trim();
+interface GeoCandidate {
+  name: string;
+  admin1?: string;
+  country_code?: string;
+  population?: number;
+  latitude: number;
+  longitude: number;
+}
+
+/** Full state names and abbreviations, so we can detect "city state" input. */
+const US_STATE_TOKENS = new Set([
+  'al','ak','az','ar','ca','co','ct','de','fl','ga','hi','id','il','in','ia','ks','ky','la','me','md',
+  'ma','mi','mn','ms','mo','mt','ne','nv','nh','nj','nm','ny','nc','nd','oh','ok','or','pa','ri','sc',
+  'sd','tn','tx','ut','vt','va','wa','wv','wi','wy','dc',
+  'alabama','alaska','arizona','arkansas','california','colorado','connecticut','delaware','florida',
+  'georgia','hawaii','idaho','illinois','indiana','iowa','kansas','kentucky','louisiana','maine',
+  'maryland','massachusetts','michigan','minnesota','mississippi','missouri','montana','nebraska',
+  'nevada','ohio','oklahoma','oregon','pennsylvania','tennessee','texas','utah','vermont','virginia',
+  'washington','wisconsin','wyoming',
+]);
+
+/**
+ * Picks the best candidate rather than blindly taking the first.
+ *
+ * Open-Meteo returns matches in its own order, which is how a search for
+ * "Bronx" resolved to Bronx, IDAHO (population ~0) instead of the Bronx in New
+ * York. Preferring US results and then population fixes that class of error,
+ * which would otherwise silently produce a report for the wrong place.
+ */
+function pickBestCandidate(results: GeoCandidate[]): GeoCandidate | null {
+  if (!results.length) return null;
+  return results
+    .slice()
+    .sort((a, b) => {
+      const usA = a.country_code === 'US' ? 1 : 0;
+      const usB = b.country_code === 'US' ? 1 : 0;
+      if (usA !== usB) return usB - usA;
+      return (b.population ?? 0) - (a.population ?? 0);
+    })[0];
+}
+
+async function geocodeOnce(name: string): Promise<GeoCandidate | null> {
   const url = new URL('https://geocoding-api.open-meteo.com/v1/search');
-  url.searchParams.set('name', trimmed);
-  url.searchParams.set('count', '1');
+  url.searchParams.set('name', name);
+  url.searchParams.set('count', '10');
   url.searchParams.set('language', 'en');
   url.searchParams.set('format', 'json');
-
   try {
     const res = await fetch(url.toString());
-    if (!res.ok) throw new Error(`geocoding ${res.status}`);
+    if (!res.ok) return null;
     const json = await res.json();
-    const hit = Array.isArray(json?.results) ? json.results[0] : null;
-    if (!hit) throw new Error('no match');
-    return {
-      query: trimmed,
-      name: hit.name,
-      state: hit.admin1,
-      latitude: hit.latitude,
-      longitude: hit.longitude,
-      resolved: true,
-    };
+    const results = Array.isArray(json?.results) ? (json.results as GeoCandidate[]) : [];
+    return pickBestCandidate(results);
   } catch {
-    return {
-      query: trimmed,
-      name: trimmed,
-      latitude: Number.NaN,
-      longitude: Number.NaN,
-      resolved: false,
-    };
+    return null;
   }
+}
+
+/**
+ * Builds progressively simpler queries. The geocoder does not accept
+ * "san diego california" as one string, so we also try dropping a trailing
+ * state token, then fall back to the first one or two words.
+ */
+function candidateQueries(raw: string): string[] {
+  const text = raw.toLowerCase().replace(/[,]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!text) return [];
+  const tokens = text.split(' ');
+  const queries = [text];
+
+  // "san diego california" -> "san diego"
+  if (tokens.length > 1 && US_STATE_TOKENS.has(tokens[tokens.length - 1])) {
+    queries.push(tokens.slice(0, -1).join(' '));
+  }
+  // "new york bronx" -> "bronx" (the more specific locality is often last)
+  if (tokens.length > 1) queries.push(tokens[tokens.length - 1]);
+  // "kansas city missouri" -> "kansas city"
+  if (tokens.length > 2) queries.push(tokens.slice(0, 2).join(' '));
+  queries.push(tokens[0]);
+
+  return [...new Set(queries)].filter(Boolean);
+}
+
+export async function resolveServiceArea(query: string): Promise<ServiceArea> {
+  const trimmed = query.trim();
+
+  for (const candidate of candidateQueries(trimmed)) {
+    const hit = await geocodeOnce(candidate);
+    if (hit) {
+      return {
+        query: trimmed,
+        name: hit.name,
+        state: hit.admin1,
+        latitude: hit.latitude,
+        longitude: hit.longitude,
+        resolved: true,
+      };
+    }
+  }
+
+  return {
+    query: trimmed,
+    name: trimmed,
+    latitude: Number.NaN,
+    longitude: Number.NaN,
+    resolved: false,
+  };
 }
 
 /* ------------------------------------------------------------------ *
@@ -722,6 +803,8 @@ export const DEFAULT_AVG_TICKET: Record<Trade, number> = {
   snow_ice: 350,
   air_quality: 700,
   foundation: 8_000,
+  electrical: 1_100,
+  garage_doors: 1_300,
 };
 
 /**
@@ -832,6 +915,19 @@ const WIND_SERVICES: Partial<Record<Trade, string[]>> = {
     'Gutter replacement',
     'Debris clearing',
   ],
+  garage_doors: [
+    'Wind-damaged panel replacement',
+    'Track and roller realignment',
+    'Opener repair after power surge',
+    'Wind-rated door upgrade',
+  ],
+  electrical: [
+    'Storm damage electrical inspection',
+    'Service mast and meter repair',
+    'Surge protection installation',
+    'Standby generator quote',
+    'Panel replacement after water ingress',
+  ],
 };
 
 function eventsFromStormDays(days: SpcStormDay[], today: Date): StormEvent[] {
@@ -882,8 +978,10 @@ function eventsFromStormDays(days: SpcStormDay[], today: Date): StormEvent[] {
     // ---- OBSERVED WIND DAMAGE -> tree service, fencing, gutters, roofing ----
     if (typeof day.maxWindMph === 'number' && day.maxWindMph >= WIND_DAMAGING_MPH) {
       const mph = day.maxWindMph;
+      // Severe wind takes out garage door panels and service masts too, and
+      // outages drive standby generator quotes for electricians.
       const trades: Trade[] = mph >= WIND_SEVERE_MPH
-        ? ['tree_service', 'roofing', 'fencing', 'gutters']
+        ? ['tree_service', 'roofing', 'fencing', 'gutters', 'garage_doors', 'electrical']
         : ['tree_service', 'gutters'];
       for (const trade of trades) {
         out.push({
