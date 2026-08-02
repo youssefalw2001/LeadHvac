@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { alertsConfigured, subscribeToAlerts } from './stormAlerts';
+import { alertsConfigured, startCheckout, subscribeToAlerts, type PaidPlan } from './stormAlerts';
 import { TRADE_LABELS, type ServiceArea, type Trade } from './stormIntel';
 import { HAIL_CLAIMABLE_INCHES } from './spcReports';
 
@@ -13,6 +13,7 @@ export function AlertSignup({ area, defaultTrade }: { area: ServiceArea; default
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [subscriptionId, setSubscriptionId] = useState<string | null>(null);
 
   const configured = alertsConfigured();
 
@@ -34,6 +35,7 @@ export function AlertSignup({ area, defaultTrade }: { area: ServiceArea; default
     setBusy(false);
 
     if (result.ok) {
+      setSubscriptionId(result.subscriptionId);
       setDone(true);
       return;
     }
@@ -50,6 +52,19 @@ export function AlertSignup({ area, defaultTrade }: { area: ServiceArea; default
     }
   }
 
+  async function upgrade(plan: PaidPlan) {
+    if (!subscriptionId) {
+      setError('Save your area first, then choose a plan.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const result = await startCheckout(subscriptionId, plan);
+    setBusy(false);
+    if (result.ok) window.location.href = result.url;
+    else setError(result.detail);
+  }
+
   if (done) {
     return (
       <section className="jl-alertbox jl-alertbox--done">
@@ -62,6 +77,51 @@ export function AlertSignup({ area, defaultTrade }: { area: ServiceArea; default
           {HAIL_CLAIMABLE_INCHES.toFixed(2)}" or wind at or above 58&nbsp;mph within {radius} miles.
           One message per storm — never a digest, never a newsletter.
         </p>
+
+        <div className="jl-plans">
+          <article className="jl-plan">
+            <header>
+              <span className="jl-plan__name">Alerts</span>
+              <span className="jl-plan__price">$99<i>/mo</i></span>
+            </header>
+            <ul>
+              <li>Email and SMS the moment your thresholds trip</li>
+              <li>Unlimited claim evidence reports</li>
+              <li>Full ad playbook with radius targets</li>
+            </ul>
+            <button
+              className="jl-btn jl-btn--accent jl-btn--block"
+              onClick={() => void upgrade('alerts')}
+              disabled={busy}
+            >
+              {busy ? 'Opening checkout…' : 'Start alerts'}
+            </button>
+          </article>
+
+          <article className="jl-plan jl-plan--feature">
+            <header>
+              <span className="jl-plan__name">Territory</span>
+              <span className="jl-plan__price">$249<i>/mo</i></span>
+            </header>
+            <ul>
+              <li>Everything in Alerts</li>
+              <li><strong>Exclusive to one contractor per ZIP</strong></li>
+              <li>48-hour head start before storms go public</li>
+            </ul>
+            <button
+              className="jl-btn jl-btn--light jl-btn--block"
+              onClick={() => void upgrade('territory')}
+              disabled={busy}
+            >
+              {busy ? 'Opening checkout…' : 'Claim my territory'}
+            </button>
+          </article>
+        </div>
+
+        <p className="jl-alertbox__note">
+          One exclusive roofing lead costs $150–550. Cancel any time, no contract.
+        </p>
+        {error && <p className="jl-alertbox__error">{error}</p>}
       </section>
     );
   }

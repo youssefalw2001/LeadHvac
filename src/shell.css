@@ -451,3 +451,381 @@
 .jl-alertbox__statnum {
   font-variant-numeric: tabular-nums;
 }
+
+
+/* ==================================================================== *
+ * PRICING PLANS
+ * ==================================================================== */
+
+.jl-plans {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+  margin-top: 1.75rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.13);
+}
+
+.jl-plan {
+  padding: 1.375rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 1rem 1rem 1rem 0.25rem;
+  background: rgba(255, 255, 255, 0.035);
+  display: flex;
+  flex-direction: column;
+}
+
+.jl-plan--feature {
+  border-color: var(--jl-accent);
+  background: rgba(255, 122, 26, 0.07);
+}
+
+.jl-plan header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.875rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.jl-plan__name {
+  font-size: 0.625rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.jl-plan__price {
+  font-size: 1.875rem;
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.jl-plan__price i {
+  font-style: normal;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.jl-plan ul {
+  flex: 1;
+  margin: 1rem 0 1.25rem;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.jl-plan li {
+  position: relative;
+  padding-left: 1.125rem;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.jl-plan li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.5rem;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--jl-accent);
+}
+
+.jl-plan li strong {
+  color: #fff;
+}
+
+.jl-btn--block {
+  width: 100%;
+}
+
+.jl-btn--light {
+  background: #fff;
+  color: var(--jl-ink);
+}
+
+.jl-btn--light:hover:not(:disabled) {
+  filter: brightness(0.94);
+}
+
+/* ==================================================================== *
+ * CONTENT PREMIUM LAYER
+ *
+ * The earlier "premium" pass only reached the nav and the alert box, because
+ * the page bodies are Tailwind utility classes. These rules target the actual
+ * report content so the polish is visible where people spend their time.
+ * ==================================================================== */
+
+/* HERO ---------------------------------------------------------------- */
+
+.jl-hero {
+  position: relative;
+  padding: 4rem 1.5rem 3.5rem;
+  background: var(--jl-ink);
+  color: #fff;
+  overflow: hidden;
+}
+
+/* A faint measurement grid instead of a gradient wash. Reads as instrument,
+   not template. */
+.jl-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 3.5rem 3.5rem;
+  mask-image: radial-gradient(ellipse 80% 60% at 20% 0%, #000 30%, transparent 75%);
+  pointer-events: none;
+}
+
+.jl-hero__inner {
+  position: relative;
+  max-width: 56rem;
+  margin: 0 auto;
+}
+
+.jl-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.625rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--jl-accent);
+}
+
+.jl-eyebrow::before {
+  content: '';
+  width: 1.5rem;
+  height: 1px;
+  background: var(--jl-accent);
+}
+
+.jl-hero h1 {
+  margin: 1.125rem 0 0;
+  font-size: clamp(2rem, 5.4vw, 3.5rem);
+  font-weight: 900;
+  letter-spacing: -0.055em;
+  line-height: 1.02;
+}
+
+.jl-hero h1 em {
+  font-style: normal;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.jl-hero__sub {
+  margin: 1.25rem 0 0;
+  max-width: 38rem;
+  font-size: 1.0625rem;
+  line-height: 1.62;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+/* A row of measured facts under the hero, replacing decorative imagery. */
+.jl-proof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2.25rem;
+  margin-top: 2.5rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.11);
+}
+
+.jl-proof__item b {
+  display: block;
+  font-size: 1.625rem;
+  font-weight: 900;
+  letter-spacing: -0.045em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.jl-proof__item span {
+  display: block;
+  margin-top: 0.4375rem;
+  max-width: 9rem;
+  font-size: 0.625rem;
+  font-weight: 800;
+  line-height: 1.5;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+/* THE ANSWER CARD ----------------------------------------------------- */
+
+.jl-answer {
+  position: relative;
+  padding: 1.875rem;
+  background: #fff;
+  border: 1px solid var(--jl-line);
+  /* Asymmetric, and heavier on the accent edge only. */
+  border-top: 3px solid var(--jl-accent);
+  border-radius: 0.25rem 1.25rem 1.25rem 1.25rem;
+  box-shadow: 0 22px 60px rgba(7, 20, 47, 0.09);
+}
+
+.jl-answer__label {
+  font-size: 0.625rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--jl-accent);
+}
+
+.jl-answer h2 {
+  margin: 0.875rem 0 0;
+  font-size: clamp(1.375rem, 3vw, 1.875rem);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1.12;
+  color: var(--jl-ink);
+}
+
+.jl-answer__detail {
+  margin: 0.875rem 0 0;
+  max-width: 38rem;
+  font-size: 0.9375rem;
+  line-height: 1.68;
+  color: var(--jl-muted);
+}
+
+.jl-chiprow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.625rem;
+}
+
+.jl-chip {
+  padding: 0.375rem 0.625rem;
+  border-radius: 0.4375rem;
+  background: var(--jl-ink);
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: -0.005em;
+}
+
+.jl-chip--ghost {
+  background: #fff;
+  color: var(--jl-ink);
+  border: 1px solid var(--jl-line);
+}
+
+.jl-microlabel {
+  font-size: 0.625rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--jl-muted);
+}
+
+/* EXAMPLE PROMPTS ----------------------------------------------------- */
+
+.jl-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.125rem;
+}
+
+.jl-example {
+  padding: 0.4375rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.75rem;
+  font-weight: 700;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.jl-example:hover {
+  border-color: rgba(255, 255, 255, 0.42);
+  color: #fff;
+}
+
+/* SEARCH BAR ---------------------------------------------------------- */
+
+.jl-search {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin-top: 2rem;
+}
+
+@media (min-width: 640px) {
+  .jl-search {
+    flex-direction: row;
+  }
+}
+
+.jl-search input {
+  flex: 1;
+  padding: 1.0625rem 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.875rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.jl-search input::placeholder {
+  color: rgba(255, 255, 255, 0.34);
+}
+
+.jl-search input:focus {
+  border-color: var(--jl-accent);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.jl-search button {
+  padding: 1.0625rem 1.75rem;
+  border: 0;
+  border-radius: 0.875rem;
+  background: var(--jl-accent);
+  color: #1a0c00;
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+  transition: filter 0.15s, transform 0.08s;
+}
+
+.jl-search button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.jl-search button:active {
+  transform: translateY(1px);
+}
+
+.jl-search button:disabled {
+  opacity: 0.4;
+}
+
+.jl-fineprint {
+  margin: 1rem 0 0;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: rgba(255, 255, 255, 0.34);
+}
